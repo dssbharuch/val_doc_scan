@@ -1,0 +1,23 @@
+{
+  "name": "document-scanner-step1",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^5.0.4",
+    "vite": "^7.1.7",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "tailwindcss": "^4.1.13",
+    "@tailwindcss/vite": "^4.1.13",
+    "vite-plugin-pwa": "^1.0.3",
+    "tesseract.js": "^6.0.1",
+    "@google/genai": "^1.0.0"
+  },
+  "devDependencies": {}
+}
