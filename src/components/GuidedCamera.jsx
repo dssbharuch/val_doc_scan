@@ -74,10 +74,13 @@ export default function GuidedCamera({ onCapture, onClose }) {
       return;
     }
 
-    // Portrait-friendly guide: central 82% width, 76% height.
-    // The UI frame and this crop use the same percentages.
-    const cropW = Math.max(1, Math.round(videoWidth * 0.82));
-    const cropH = Math.max(1, Math.round(videoHeight * 0.76));
+    // Compact default scan area for 1–4 lines.
+    // The same scaled area is used for the actual captured image.
+    const baseW = 0.40;
+    const baseH = 0.18;
+    const scale = Number.isFinite(guideScale) ? guideScale : 1;
+    const cropW = Math.max(2, Math.min(videoWidth, Math.round(videoWidth * baseW * scale)));
+    const cropH = Math.max(2, Math.min(videoHeight, Math.round(videoHeight * baseH * scale)));
     const sx = Math.round((videoWidth - cropW) / 2);
     const sy = Math.round((videoHeight - cropH) / 2);
 
@@ -140,11 +143,23 @@ export default function GuidedCamera({ onCapture, onClose }) {
 
         {/* Dark mask around the capture area */}
         <div className="pointer-events-none absolute inset-0 bg-black/45">
-          <div className="absolute left-1/2 top-1/2 h-[76%] w-[82%] -translate-x-1/2 -translate-y-1/2 rounded-xl bg-transparent shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]" />
+          <div
+            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-xl bg-transparent shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]"
+            style={{
+              width: `${Math.min(100, 40 * guideScale)}%`,
+              height: `${Math.min(100, 18 * guideScale)}%`
+            }}
+          />
         </div>
 
         {/* Document guide */}
-        <div className="pointer-events-none absolute left-1/2 top-1/2 h-[76%] w-[82%] -translate-x-1/2 -translate-y-1/2">
+        <div
+          className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+          style={{
+            width: `${Math.min(100, 40 * guideScale)}%`,
+            height: `${Math.min(100, 18 * guideScale)}%`
+          }}
+        >
           <div className="absolute inset-0 rounded-xl border-2 border-white/90" />
           <div className="absolute -left-0.5 -top-0.5 h-10 w-10 rounded-tl-xl border-l-4 border-t-4 border-blue-400" />
           <div className="absolute -right-0.5 -top-0.5 h-10 w-10 rounded-tr-xl border-r-4 border-t-4 border-blue-400" />
@@ -187,8 +202,8 @@ export default function GuidedCamera({ onCapture, onClose }) {
           <input
             aria-label="Scan area size"
             type="range"
-            min="0.75"
-            max="1.8"
+            min="0.70"
+            max="2.50"
             step="0.05"
             value={guideScale}
             onChange={(e) => setGuideScale(Number(e.target.value))}
