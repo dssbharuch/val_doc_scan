@@ -6,6 +6,7 @@ export default function GuidedCamera({ onCapture, onClose }) {
   const [error, setError] = useState("");
   const [ready, setReady] = useState(false);
   const [facingMode, setFacingMode] = useState("environment");
+  const [guideScale, setGuideScale] = useState(1);
 
   useEffect(() => {
     let active = true;
@@ -65,13 +66,18 @@ export default function GuidedCamera({ onCapture, onClose }) {
     const video = videoRef.current;
     if (!video || !ready) return;
 
-    const videoWidth = video.videoWidth;
-    const videoHeight = video.videoHeight;
+    const videoWidth = Number(video.videoWidth);
+    const videoHeight = Number(video.videoHeight);
+
+    if (!Number.isFinite(videoWidth) || !Number.isFinite(videoHeight) || videoWidth < 2 || videoHeight < 2) {
+      setError("Camera image is not ready yet. Please wait a moment and try again.");
+      return;
+    }
 
     // Portrait-friendly guide: central 82% width, 76% height.
     // The UI frame and this crop use the same percentages.
-    const cropW = Math.round(videoWidth * 0.82);
-    const cropH = Math.round(videoHeight * 0.76);
+    const cropW = Math.max(1, Math.round(videoWidth * 0.82));
+    const cropH = Math.max(1, Math.round(videoHeight * 0.76));
     const sx = Math.round((videoWidth - cropW) / 2);
     const sy = Math.round((videoHeight - cropH) / 2);
 
@@ -79,7 +85,16 @@ export default function GuidedCamera({ onCapture, onClose }) {
     canvas.width = cropW;
     canvas.height = cropH;
 
+    if (!Number.isInteger(canvas.width) || !Number.isInteger(canvas.height) || canvas.width < 1 || canvas.height < 1) {
+      setError("Could not create the captured image. Please try again.");
+      return;
+    }
+
     const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      setError("Canvas is not supported by this browser.");
+      return;
+    }
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
 
@@ -166,6 +181,20 @@ export default function GuidedCamera({ onCapture, onClose }) {
             {error}
           </div>
         )}
+
+        <div className="absolute bottom-28 left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/60 px-3 py-2 text-xs backdrop-blur">
+          <span>Scan area</span>
+          <input
+            aria-label="Scan area size"
+            type="range"
+            min="0.75"
+            max="1.8"
+            step="0.05"
+            value={guideScale}
+            onChange={(e) => setGuideScale(Number(e.target.value))}
+            className="ml-2 w-28 align-middle"
+          />
+        </div>
 
         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-6 pt-24">
           <div className="mb-4 text-center text-xs text-slate-200">

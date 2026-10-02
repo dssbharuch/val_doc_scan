@@ -19,9 +19,11 @@ export default function ScanEditor({ page, onDone, onCancel }) {
   function stop(){setDragging(null)}
   async function makeCanvas(){
     const img=imgRef.current;if(!img)throw Error('Image not ready');
-    const sw=img.naturalWidth,sh=img.naturalHeight;let sx=0,sy=0,cw=sw,ch=sh;
+    const sw=Number(img.naturalWidth),sh=Number(img.naturalHeight);
+    if(!Number.isFinite(sw)||!Number.isFinite(sh)||sw<1||sh<1) throw Error('Image is not ready. Please wait and try again.');
+    let sx=0,sy=0,cw=sw,ch=sh;
     if(mode==='rectangle'&&selection){const r=img.getBoundingClientRect(),fx=sw/r.width,fy=sh/r.height;sx=selection.x*fx;sy=selection.y*fy;cw=selection.w*fx;ch=selection.h*fy;if(cw<20||ch<20)throw Error('Please select a larger area.')}
-    const c=document.createElement('canvas');c.width=Math.round(cw);c.height=Math.round(ch);const ctx=c.getContext('2d');ctx.drawImage(img,sx,sy,cw,ch,0,0,c.width,c.height);
+    const c=document.createElement('canvas');c.width=Math.max(1,Math.round(cw));c.height=Math.max(1,Math.round(ch));const ctx=c.getContext('2d');ctx.drawImage(img,sx,sy,cw,ch,0,0,c.width,c.height);
     if(rotation%360){const a=((rotation%360)+360)%360*Math.PI/180,r=document.createElement('canvas'),q=rotation%180!==0;r.width=q?c.height:c.width;r.height=q?c.width:c.height;const rc=r.getContext('2d');rc.translate(r.width/2,r.height/2);rc.rotate(a);rc.drawImage(c,-c.width/2,-c.height/2);return r}return c;
   }
   async function runOCR(){setBusy(true);setProgress(0);setStatus('Preparing image...');try{let c=await makeCanvas();if(preprocess!=='original')c=createEnhancedCanvas(c,{contrast:preprocess==='strong'?1.55:1.3,brightness:preprocess==='strong'?1.08:1.03,scale:preprocess==='strong'?2.5:2});const b=await canvasToBlob(c);const u=URL.createObjectURL(b);setSourceUrl(u);setStatus(`OCR running: ${ocrMode}`);const result=await Tesseract.recognize(c,ocrMode,{logger:m=>{if(typeof m.progress==='number')setProgress(Math.round(m.progress*100));if(m.status)setStatus(m.status)}});setOcrText(result.data.text||'');setStatus('OCR completed. Please correct the text.')}catch(e){console.error(e);setStatus(e.message||'OCR failed.')}finally{setBusy(false)}}
