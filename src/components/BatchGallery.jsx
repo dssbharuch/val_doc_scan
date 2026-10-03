@@ -32,11 +32,9 @@ export default function BatchGallery({
             key={page.id}
             className="flex gap-3 rounded-xl border border-slate-200 bg-white p-2 shadow-sm"
           >
-            <img
-              src={page.imageUrl}
-              alt={`Page ${index + 1}`}
-              className="h-24 w-20 rounded-lg object-cover"
-            />
+            <div className="flex h-20 w-16 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xs text-slate-400">
+              OCR
+            </div>
 
             <div className="min-w-0 flex-1">
               <div className="flex items-center justify-between">
@@ -57,13 +55,6 @@ export default function BatchGallery({
               </p>
 
               <div className="mt-2 flex flex-wrap gap-2">
-                <button
-                  onClick={() => onEdit(page)}
-                  className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-700"
-                >
-                  Edit / Rescan
-                </button>
-
                 <button
                   onClick={() => onMove(page.id, -1)}
                   disabled={index === 0}
