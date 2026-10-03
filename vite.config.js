@@ -12,6 +12,7 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: "autoUpdate",
+      workbox: { cleanupOutdatedCaches: true, skipWaiting: true, clientsClaim: true },
       manifest: {
         name: "Document Scanner",
         short_name: "Doc Scanner",

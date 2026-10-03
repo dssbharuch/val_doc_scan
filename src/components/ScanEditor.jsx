@@ -35,6 +35,21 @@ export default function ScanEditor({ page, onDone, onCancel }) {
     }
   }, [sourceUrl, page.imageUrl]);
 
+  const onCancelRef = useRef(onCancel);
+  useEffect(() => {
+    onCancelRef.current = onCancel;
+  }, [onCancel]);
+
+  useEffect(() => {
+    window.history.pushState({ scannerEditor: true }, "");
+    const onBack = () => onCancelRef.current();
+    window.addEventListener("popstate", onBack);
+
+    return () => {
+      window.removeEventListener("popstate", onBack);
+    };
+  }, []);
+
   function syncLines(lines) {
     const next = lines.filter((line) => String(line).trim() !== '');
     setOcrLines(next);
@@ -53,6 +68,8 @@ export default function ScanEditor({ page, onDone, onCancel }) {
 
   function reset() { setRotation(0); setZoom(1); }
   function choose(m) { setMode(m); setSelection(null); setStatus(''); reset(); }
+
+  useEffect(() => { if (mode === null) setMode(page.scanMode === 'full' ? 'full' : 'rectangle'); }, [mode, page.scanMode]);
 
   function pointerDown(e) {
     if (mode !== 'rectangle') return;
@@ -123,7 +140,7 @@ export default function ScanEditor({ page, onDone, onCancel }) {
       workerLangRef.current = null;
     }
 
-    setStatus(`Loading ${ocrMode === 'guj' ? 'Gujarati' : 'English'} OCR...`);
+    setStatus(`Loading ${ocrMode === 'eng' ? 'English' : ocrMode === 'guj' ? 'Gujarati' : 'English + Gujarati'} OCR...`);
     const worker = await Tesseract.createWorker(ocrMode, 1, {
       logger: (m) => {
         if (typeof m.progress === 'number') setProgress(Math.round(m.progress * 100));
@@ -164,7 +181,7 @@ export default function ScanEditor({ page, onDone, onCancel }) {
         user_defined_dpi: '300'
       });
 
-      setStatus(`Extracting ${ocrMode === 'guj' ? 'Gujarati' : 'English'} text...`);
+      setStatus(`Extracting ${ocrMode === 'eng' ? 'English' : ocrMode === 'guj' ? 'Gujarati' : 'English + Gujarati'} text...`);
       const result = await worker.recognize(c);
       const text = result?.data?.text || '';
       const lines = cleanOCRLines(text);
@@ -202,26 +219,29 @@ export default function ScanEditor({ page, onDone, onCancel }) {
   function save() { onDone({ ...page, scanMode: mode, crop: selection, rotation, ocrText, editedText: ocrText }); }
 
   return <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950"><div className="mx-auto min-h-screen max-w-3xl bg-slate-100">
-    <header className="sticky top-0 z-30 flex justify-between bg-slate-900 px-4 py-3 text-white"><div><div className="text-xs text-slate-300">Page {page.pageNumber}</div><h2 className="font-semibold">Scan & Improve OCR</h2></div><button onClick={onCancel} className="rounded-lg bg-white/10 px-3 py-2">Close</button></header>
+    <header className="sticky top-0 z-30 flex items-center justify-between bg-slate-900 px-4 py-3 text-white">
+<button onClick={onCancel} className="rounded-lg bg-white/10 px-3 py-2 text-sm">← Back</button>
+<div className="text-center"><div className="text-xs text-slate-300">Page {page.pageNumber}</div><h2 className="font-semibold">Scan & Improve OCR</h2></div><div className="w-16"/>
+</header>
     <div className="p-4">
-      {!mode ? <div className="rounded-2xl bg-white p-5 shadow"><h3 className="text-lg font-semibold">Choose Scan Mode</h3><p className="mt-1 text-sm text-slate-500">Choose Full Image for the whole page, or Rectangle to OCR only the exact area you select.</p><div className="mt-5 grid gap-3 sm:grid-cols-3">
-        <button onClick={() => choose('full')} className="rounded-xl bg-slate-900 p-5 text-left text-white">📄<div className="mt-2 font-semibold">Full Image</div><div className="text-xs text-slate-300">OCR whole page</div></button>
-        <button onClick={() => choose('rectangle')} className="rounded-xl border p-5 text-left">▣<div className="mt-2 font-semibold">Rectangle</div><div className="text-xs text-slate-500">OCR only the selected rectangle</div></button>
-        <button onClick={() => { setMode('document'); setShowCorners(true); }} className="rounded-xl border border-blue-300 bg-blue-50 p-5 text-left">📐<div className="mt-2 font-semibold text-blue-900">Document Crop</div><div className="text-xs text-blue-700">Set 4 corners</div></button>
-      </div></div> : <>
+      <>
         <div className="overflow-hidden rounded-2xl bg-black"><div className="relative flex min-h-[45vh] items-center justify-center overflow-auto select-none touch-none" onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={stop} onPointerCancel={stop} style={{ touchAction: 'none' }}>
-          <img ref={imgRef} src={sourceUrl} className="block max-h-[65vh] max-w-full object-contain" style={imageStyle} draggable="false" />
+          <img ref={imgRef} src={sourceUrl} onLoad={(e)=>{if(page.scanMode!=="full"&&!selection){const r=e.currentTarget.getBoundingClientRect();setSelection({x:0,y:0,w:r.width,h:r.height});}}} className="block max-h-[65vh] max-w-full object-contain" style={imageStyle} draggable="false" />
           {mode === 'rectangle' && selection && <div className="pointer-events-none absolute border-2 border-blue-400 bg-blue-500/10" style={{ left: imgRef.current ? imgRef.current.offsetLeft + selection.x : selection.x, top: imgRef.current ? imgRef.current.offsetTop + selection.y : selection.y, width: selection.w, height: selection.h }} />}
         </div></div>
-        <div className="mt-3 rounded-2xl bg-white p-3 shadow"><div className="flex flex-wrap gap-2"><button onClick={() => setRotation(v => (v + 90) % 360)} className="rounded-lg bg-slate-100 px-3 py-2 text-sm">↻ Rotate</button><button onClick={() => setZoom(v => Math.min(2.5, v + .25))} className="rounded-lg bg-slate-100 px-3 py-2 text-sm">＋ Zoom</button><button onClick={() => setZoom(v => Math.max(.75, v - .25))} className="rounded-lg bg-slate-100 px-3 py-2 text-sm">－ Zoom</button><button onClick={reset} className="rounded-lg bg-slate-100 px-3 py-2 text-sm">Reset</button><button onClick={() => { setMode(null); setSourceUrl(page.imageUrl); reset(); }} className="rounded-lg bg-slate-100 px-3 py-2 text-sm">Change Scan</button>{mode === 'document' && <button onClick={() => setShowCorners(true)} className="rounded-lg bg-blue-100 px-3 py-2 text-sm font-medium text-blue-800">📐 Adjust Corners</button>}</div><div className="mt-2 text-xs text-slate-500">Rotation {rotation}° · Zoom {Math.round(zoom * 100)}%</div></div>
-        <div className="mt-3 rounded-2xl bg-white p-4 shadow"><div className="grid gap-3 sm:grid-cols-2"><label className="text-xs font-medium text-slate-500">OCR language<select value={ocrMode} onChange={e => setOcrMode(e.target.value)} className="mt-1 w-full rounded-lg border p-2 text-sm"><option value="eng">English</option><option value="guj">Gujarati</option></select></label><label className="text-xs font-medium text-slate-500">Enhancement<select value={preprocess} onChange={e => setPreprocess(e.target.value)} className="mt-1 w-full rounded-lg border p-2 text-sm"><option value="original">Original</option><option value="enhanced">Enhanced</option><option value="strong">Strong</option></select></label></div><button onClick={runOCR} disabled={busy || (mode === 'rectangle' && !selection)} className="mt-4 w-full rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white disabled:opacity-40">{busy ? '🔎 Processing...' : '🔎 Extract Text'}</button><button onClick={() => { setPreprocess('strong'); setTimeout(runOCR, 50); }} disabled={busy} className="mt-2 w-full rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-800">🔄 Try Better OCR</button></div>
+        <div className="mt-3 rounded-2xl bg-white p-3 shadow"><div className="flex flex-wrap gap-2"><button onClick={() => setRotation(v => (v + 90) % 360)} className="rounded-lg bg-slate-100 px-3 py-2 text-sm">↻ Rotate</button><button onClick={() => setZoom(v => Math.min(2.5, v + .25))} className="rounded-lg bg-slate-100 px-3 py-2 text-sm">＋ Zoom</button><button onClick={() => setZoom(v => Math.max(.75, v - .25))} className="rounded-lg bg-slate-100 px-3 py-2 text-sm">－ Zoom</button><button onClick={reset} className="rounded-lg bg-slate-100 px-3 py-2 text-sm">Reset</button>{mode === 'document' && <button onClick={() => setShowCorners(true)} className="rounded-lg bg-blue-100 px-3 py-2 text-sm font-medium text-blue-800">📐 Adjust Corners</button>}</div><div className="mt-2 text-xs text-slate-500">Rotation {rotation}° · Zoom {Math.round(zoom * 100)}%</div></div>
+        <div className="mt-3 rounded-2xl bg-white p-4 shadow"><div className="grid gap-3 sm:grid-cols-2"><div className="text-xs font-medium text-slate-500">OCR language
+<div className="mt-1 grid grid-cols-3 gap-1 rounded-lg bg-slate-100 p-1">
+{[["eng","Eng"],["guj","Guj"],["eng+guj","Both"]].map(([value,label])=>
+<button key={value} type="button" onClick={()=>setOcrMode(value)} className={`rounded-md px-2 py-2 text-xs font-semibold ${ocrMode===value?"bg-white text-blue-700 shadow-sm":"text-slate-500"}`}>{label}</button>)}
+</div></div><label className="text-xs font-medium text-slate-500">Enhancement<select value={preprocess} onChange={e => setPreprocess(e.target.value)} className="mt-1 w-full rounded-lg border p-2 text-sm"><option value="original">Original</option><option value="enhanced">Enhanced</option><option value="strong">Strong</option></select></label></div><button onClick={runOCR} disabled={busy || (mode === 'rectangle' && !selection)} className="mt-4 w-full rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white disabled:opacity-40">{busy ? '🔎 Processing...' : '🔎 Extract Text'}</button><button onClick={() => { setPreprocess('strong'); setTimeout(runOCR, 50); }} disabled={busy} className="mt-2 w-full rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-800">🔄 Try Better OCR</button></div>
         {status && <div className="mt-3 rounded-xl bg-blue-50 p-3 text-sm text-blue-800">{status}</div>}{progress > 0 && progress < 100 && <div className="mt-3 rounded-xl bg-white p-3"><div className="text-xs text-slate-500">OCR progress {progress}%</div><div className="mt-1 h-2 rounded-full bg-slate-200"><div className="h-2 rounded-full bg-blue-600" style={{ width: `${progress}%` }} /></div></div>}
         <section className="mt-4 rounded-2xl bg-white p-4 shadow"><div className="mb-2 flex items-center justify-between"><h3 className="font-semibold">OCR Text</h3><span className="text-xs text-slate-400">Edit or remove lines</span></div>
           {ocrLines.length ? <div className="space-y-2">{ocrLines.map((line, index) => <div key={`${index}-${line.slice(0, 12)}`} className="flex items-start gap-2"><textarea value={line} onChange={e => updateLine(index, e.target.value)} rows={Math.max(1, Math.ceil(line.length / 70))} className="min-w-0 flex-1 rounded-xl border p-3 text-sm leading-6 outline-none focus:border-blue-500"/><button type="button" onClick={() => removeLine(index)} aria-label={`Remove line ${index + 1}`} title="Remove whole line" className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-50 text-lg font-bold text-red-600 hover:bg-red-100">×</button></div>)}</div> : <div className="rounded-xl border border-dashed p-4 text-sm text-slate-400">No extracted text yet. Select a scan area and press Extract Text.</div>}
           <div className="mt-3 text-xs text-slate-500">Deleted lines are not saved. Edit any line before saving.</div>
           <button onClick={save} className="mt-3 w-full rounded-xl bg-emerald-600 px-4 py-3 font-semibold text-white">✓ Save Page Text</button>
         </section>
-      </>}
+      </>
     </div>
   </div>{showCorners && <FourCornerCrop imageUrl={page.imageUrl} onApply={applyCorners} onCancel={() => setShowCorners(false)} />}</div>;
 }
