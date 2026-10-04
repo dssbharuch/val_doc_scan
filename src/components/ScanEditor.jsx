@@ -26,7 +26,7 @@ function splitOCRLines(text) {
   return String(text || '').replace(/\r/g, '').split('\n').map((line) => line.trim()).filter(Boolean);
 }
 
-export default function ScanEditor({ page, onDone, onCancel, onRetake }) {
+export default function ScanEditor({ page, usedKeys = [], onDone, onCancel, onRetake }) {
   const imgRef = useRef(null);
   const workerRef = useRef(null);
   const workerLangRef = useRef(null);
@@ -159,9 +159,24 @@ export default function ScanEditor({ page, onDone, onCancel, onRetake }) {
     setLastMergeTarget(history.length ? history[history.length - 1].target : null);
   }
 
-  const usedKeys = new Set(Object.values(lineKeys));
-  const availableFields = VALUATION_FIELDS.filter(([key]) => !usedKeys.has(key) || key === lineKeys[activeLine]);
+ const currentPageKeys = new Set(Object.values(lineKeys));
 
+const availableFields = VALUATION_FIELDS.filter(([key]) => {
+  // Key already used on previous scanned pages → don't show
+  if (usedKeys.includes(key)) return false;
+
+  // Key already used on current page → don't show,
+  // except the key currently assigned to this line,
+  // so user can change it.
+  if (
+    currentPageKeys.has(key) &&
+    key !== lineKeys[activeLine]
+  ) {
+    return false;
+  }
+
+  return true;
+});
   function reset() { setRotation(0); setZoom(1); }
   useEffect(() => { if (mode === null) setMode(page.scanMode === 'full' ? 'full' : 'rectangle'); }, [mode, page.scanMode]);
 
