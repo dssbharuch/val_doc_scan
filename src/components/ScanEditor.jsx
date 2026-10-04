@@ -3,7 +3,37 @@ import Tesseract from 'tesseract.js';
 import FourCornerCrop from './FourCornerCrop';
 import { canvasToBlob, createEnhancedCanvas } from '../utils/imageProcessing';
 
-function cleanOCRLines(text) {
+// Keep OCR results useful for valuation work by hiding obvious OCR noise.
+// Hidden lines are NOT deleted from the OCR text; they can be revealed by the user.
+const KEEP_SHORT_LINES = new Set([
+  'NA', 'N/A', 'NO', 'NO.', 'E', 'W', 'N', 'S',
+  'GF', 'FF', 'SF', 'TF', 'TF2', 'BS', 'TR'
+]);
+
+function isUsefulOCRLine(line) {
+  const value = String(line || '').trim();
+  if (!value) return false;
+
+  // Common OCR-only punctuation / marks.
+  if (/^[.,;:|_~`'"\\-–—=+*()\[\]{}\/\\]+$/.test(value)) return false;
+
+  const compact = value.replace(/\s+/g, '').toUpperCase();
+
+  // Keep known short valuation tokens and short numeric values.
+  if (KEEP_SHORT_LINES.has(compact)) return true;
+  if (/^\d{1,4}(?:[./-]\d{1,4})?$/.test(compact)) return true;
+
+  // One/two-character random OCR output is normally noise.
+  if (compact.length <= 2) return false;
+
+  // Lines made almost entirely from repeated punctuation are noise.
+  const alnumCount = (value.match(/[A-Za-z0-9\u0A80-\u0AFF]/g) || []).length;
+  if (value.length >= 3 && alnumCount === 0) return false;
+
+  return true;
+}
+
+function splitOCRLines(text) {
   return String(text || '')
     .replace(/\r/g, '')
     .split('\n')
@@ -11,41 +41,9 @@ function cleanOCRLines(text) {
     .filter(Boolean);
 }
 
-const VALUATION_KEYS = [
-  ['Onr', 'Owner Name'],
-  ['Purch', 'Purchaser Name'],
-  ['Addr', 'Property Address'],
-  ['Survey', 'Plot / Survey No.'],
-  ['Door', 'Door No.'],
-  ['Village', 'Village'],
-  ['Taluka', 'Taluka'],
-  ['Dist', 'District'],
-  ['PIN', 'PIN Code'],
-  ['E-Map', 'East Boundary - Map'],
-  ['W-Map', 'West Boundary - Map'],
-  ['N-Map', 'North Boundary - Map'],
-  ['S-Map', 'South Boundary - Map'],
-  ['E-Site', 'East Boundary - Site'],
-  ['W-Site', 'West Boundary - Site'],
-  ['N-Site', 'North Boundary - Site'],
-  ['S-Site', 'South Boundary - Site'],
-  ['MapArea', 'Map Area'],
-  ['AreaUnit', 'Area Unit'],
-  ['GF', 'Ground Floor Area'],
-  ['FF', 'First Floor Area'],
-  ['Terrace', 'Terrace Floor Area'],
-  ['Bank', 'Bank & Branch'],
-  ['City', 'Place / City'],
-  ['Valuer', 'Valuer Name'],
-  ['Authority', 'Authority'],
-  ['AreaType', 'Area Type'],
-  ['Class', 'Classification'],
-  ['Urban', 'Urban Classification'],
-  ['ReportDt', 'Report / Valuation Date'],
-  ['InspectDt', 'Inspection Date'],
-  ['MapDt', 'Approved Map Date'],
-  ['Doc', 'Document / Agreement'],
-];
+function cleanOCRLines(text) {
+  return splitOCRLines(text).filter(isUsefulOCRLine);
+}
 
 export default function ScanEditor({ page, onDone, onCancel }) {
   const imgRef = useRef(null);
@@ -54,14 +52,10 @@ export default function ScanEditor({ page, onDone, onCancel }) {
   const [mode, setMode] = useState(null), [selection, setSelection] = useState(null), [dragging, setDragging] = useState(null);
   const initialText = page.editedText || page.ocrText || '';
   const [ocrText, setOcrText] = useState(initialText);
+  const initialAllLines = splitOCRLines(initialText);
   const [ocrLines, setOcrLines] = useState(cleanOCRLines(initialText));
-  const [lineKeys, setLineKeys] = useState(() => {
-    const saved = page.keyValues || [];
-    const map = {};
-    saved.forEach((item, index) => { if (item?.key && cleanOCRLines(initialText)[index] === item?.value) map[index] = item.key; });
-    return map;
-  });
-  const [keyPickerFor, setKeyPickerFor] = useState(null);
+  const [hiddenOCRLines, setHiddenOCRLines] = useState(initialAllLines.filter((line) => !isUsefulOCRLine(line)));
+  const [showHiddenLines, setShowHiddenLines] = useState(false);
   const [status, setStatus] = useState('');
   const [progress, setProgress] = useState(0), [rotation, setRotation] = useState(page.rotation || 0), [zoom, setZoom] = useState(1);
   const [busy, setBusy] = useState(false), [showCorners, setShowCorners] = useState(false), [sourceUrl, setSourceUrl] = useState(page.imageUrl);
@@ -99,6 +93,35 @@ export default function ScanEditor({ page, onDone, onCancel }) {
     setOcrText(next.join('\n'));
   }
 
+  function syncOCRResult(text) {
+    const allLines = splitOCRLines(text);
+    const visible = allLines.filter(isUsefulOCRLine);
+    const hidden = allLines.filter((line) => !isUsefulOCRLine(line));
+    setOcrLines(visible);
+    setHiddenOCRLines(hidden);
+    setShowHiddenLines(false);
+    setOcrText(allLines.join('\n'));
+    return { visible, hidden };
+  }
+
+  function restoreHiddenLine(line) {
+    setOcrLines((prev) => [...prev, line]);
+    setHiddenOCRLines((prev) => prev.filter((item) => item !== line));
+    setShowHiddenLines(false);
+    setOcrText((prev) => {
+      const existing = splitOCRLines(prev);
+      if (existing.includes(line)) return prev;
+      return [...existing, line].join('\n');
+    });
+  }
+
+  function clearAllLines() {
+    setOcrLines([]);
+    setHiddenOCRLines([]);
+    setOcrText('');
+    setShowHiddenLines(false);
+  }
+
   function updateLine(index, value) {
     const next = [...ocrLines];
     next[index] = value;
@@ -106,34 +129,8 @@ export default function ScanEditor({ page, onDone, onCancel }) {
   }
 
   function removeLine(index) {
-    const nextKeys = {};
-    Object.entries(lineKeys).forEach(([key, value]) => {
-      const i = Number(key);
-      if (i < index) nextKeys[i] = value;
-      else if (i > index) nextKeys[i - 1] = value;
-    });
-    setLineKeys(nextKeys);
     syncLines(ocrLines.filter((_, i) => i !== index));
   }
-
-  function clearAllOCR() {
-    setOcrLines([]);
-    setOcrText('');
-    setLineKeys({});
-    setKeyPickerFor(null);
-  }
-
-  function selectKey(index, key) {
-    setLineKeys((prev) => {
-      const next = { ...prev };
-      Object.keys(next).forEach((i) => { if (next[i] === key && Number(i) !== index) delete next[i]; });
-      next[index] = key;
-      return next;
-    });
-    setKeyPickerFor(null);
-  }
-
-  const usedKeys = new Set(Object.values(lineKeys));
 
   function reset() { setRotation(0); setZoom(1); }
   function choose(m) { setMode(m); setSelection(null); setStatus(''); reset(); }
@@ -253,16 +250,13 @@ export default function ScanEditor({ page, onDone, onCancel }) {
       setStatus(`Extracting ${ocrMode === 'eng' ? 'English' : ocrMode === 'guj' ? 'Gujarati' : 'English + Gujarati'} text...`);
       const result = await worker.recognize(c);
       const text = result?.data?.text || '';
-      const lines = cleanOCRLines(text);
-      syncLines(lines);
-      setLineKeys({});
-      setKeyPickerFor(null);
+      const { visible, hidden } = syncOCRResult(text);
 
       if (!text.trim()) {
         setStatus('No text detected. Try Better OCR, move closer, improve lighting, or select the text more tightly.');
       } else {
         const confidence = Number.isFinite(result?.data?.confidence) ? Math.round(result.data.confidence) : null;
-        setStatus(`OCR completed: ${lines.length} line${lines.length === 1 ? '' : 's'}${confidence !== null ? ` · confidence ${confidence}%` : ''}. You can edit or remove any line.`);
+        setStatus(`OCR completed: ${visible.length} useful line${visible.length === 1 ? '' : 's'}${hidden.length ? ` · ${hidden.length} noise line${hidden.length === 1 ? '' : 's'} hidden` : ''}${confidence !== null ? ` · confidence ${confidence}%` : ''}.`);
       }
     } catch (e) {
       console.error(e);
@@ -287,12 +281,7 @@ export default function ScanEditor({ page, onDone, onCancel }) {
     finally { setBusy(false); }
   }
 
-  function save() {
-    const keyValues = ocrLines
-      .map((value, index) => ({ key: lineKeys[index], value: String(value).trim() }))
-      .filter((item) => item.key && item.value);
-    onDone({ ...page, scanMode: mode, crop: selection, rotation, ocrText, editedText: ocrText, keyValues });
-  }
+  function save() { onDone({ ...page, scanMode: mode, crop: selection, rotation, ocrText, editedText: ocrText }); }
 
   return <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950"><div className="mx-auto min-h-screen max-w-3xl bg-slate-100">
     <header className="sticky top-0 z-30 flex items-center justify-between bg-slate-900 px-4 py-3 text-white">
@@ -312,38 +301,21 @@ export default function ScanEditor({ page, onDone, onCancel }) {
 <button key={value} type="button" onClick={()=>setOcrMode(value)} className={`rounded-md px-2 py-2 text-xs font-semibold ${ocrMode===value?"bg-white text-blue-700 shadow-sm":"text-slate-500"}`}>{label}</button>)}
 </div></div><label className="text-xs font-medium text-slate-500">Enhancement<select value={preprocess} onChange={e => setPreprocess(e.target.value)} className="mt-1 w-full rounded-lg border p-2 text-sm"><option value="original">Original</option><option value="enhanced">Enhanced</option><option value="strong">Strong</option></select></label></div><button onClick={runOCR} disabled={busy || (mode === 'rectangle' && !selection)} className="mt-4 w-full rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white disabled:opacity-40">{busy ? '🔎 Processing...' : '🔎 Extract Text'}</button><button onClick={() => { setPreprocess('strong'); setTimeout(runOCR, 50); }} disabled={busy} className="mt-2 w-full rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-800">🔄 Try Better OCR</button></div>
         {status && <div className="mt-3 rounded-xl bg-blue-50 p-3 text-sm text-blue-800">{status}</div>}{progress > 0 && progress < 100 && <div className="mt-3 rounded-xl bg-white p-3"><div className="text-xs text-slate-500">OCR progress {progress}%</div><div className="mt-1 h-2 rounded-full bg-slate-200"><div className="h-2 rounded-full bg-blue-600" style={{ width: `${progress}%` }} /></div></div>}
-        <section className="mt-4 rounded-2xl bg-white p-4 shadow"><div className="mb-2 flex items-center justify-between"><h3 className="font-semibold">OCR Text</h3><button type="button" onClick={clearAllOCR} className="rounded-full bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600">× Clear all</button></div>
-          {ocrLines.length ? <div className="space-y-3">{ocrLines.map((line, index) => <div key={`${index}-${line.slice(0, 12)}`} className="rounded-xl border border-blue-200 bg-blue-50/20 p-2">
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <button type="button" onClick={() => setKeyPickerFor(index)} className="rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm">{lineKeys[index] ? lineKeys[index] : `Line ${index + 1} · Select key`}</button>
-              <button type="button" onClick={() => removeLine(index)} aria-label={`Remove line ${index + 1}`} title="Remove whole line" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-50 text-lg font-bold text-red-600 hover:bg-red-100">×</button>
-            </div>
-            <textarea value={line} onChange={e => updateLine(index, e.target.value)} rows={Math.max(1, Math.ceil(line.length / 70))} className="w-full rounded-xl border border-blue-200 bg-white p-3 text-sm leading-6 outline-none focus:border-blue-500"/>
-          </div>)}</div> : <div className="rounded-xl border border-dashed p-4 text-sm text-slate-400">No extracted text yet. Select a scan area and press Extract Text.</div>}
-          <div className="mt-3 text-xs text-slate-500">Tap the blue button on any line to select its valuation field. A selected key is removed from the next choices.</div>
+        <section className="mt-4 rounded-2xl bg-white p-4 shadow">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h3 className="font-semibold">OCR Text</h3>
+            <button type="button" onClick={clearAllLines} className="rounded-full bg-red-50 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-100">× Clear all</button>
+          </div>
+          <div className="mb-3 text-xs text-slate-500">Short OCR noise and isolated characters are hidden automatically. They are not deleted until you clear them.</div>
+          {ocrLines.length ? <div className="space-y-2">{ocrLines.map((line, index) => <div key={`${index}-${line.slice(0, 12)}`} className="flex items-start gap-2"><textarea value={line} onChange={e => updateLine(index, e.target.value)} rows={Math.max(1, Math.ceil(line.length / 70))} className="min-w-0 flex-1 rounded-xl border p-3 text-sm leading-6 outline-none focus:border-blue-500"/><button type="button" onClick={() => removeLine(index)} aria-label={`Remove line ${index + 1}`} title="Remove whole line" className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-50 text-lg font-bold text-red-600 hover:bg-red-100">×</button></div>)}</div> : <div className="rounded-xl border border-dashed p-4 text-sm text-slate-400">No visible text yet. Select a scan area and press Extract Text.</div>}
+          {hiddenOCRLines.length > 0 && <div className="mt-3">
+            <button type="button" onClick={() => setShowHiddenLines(v => !v)} className="text-sm font-medium text-blue-700">{showHiddenLines ? 'Hide' : 'Show'} hidden OCR lines ({hiddenOCRLines.length})</button>
+            {showHiddenLines && <div className="mt-2 space-y-2 rounded-xl bg-slate-50 p-2">{hiddenOCRLines.map((line, index) => <button type="button" key={`${index}-${line}`} onClick={() => restoreHiddenLine(line)} className="block w-full rounded-lg border bg-white px-3 py-2 text-left text-sm text-slate-700 hover:border-blue-400">＋ {line}</button>)}</div>}
+          </div>}
+          <div className="mt-3 text-xs text-slate-500">Remove × deletes a visible line. Hidden lines can be restored above.</div>
           <button onClick={save} className="mt-3 w-full rounded-xl bg-emerald-600 px-4 py-3 font-semibold text-white">✓ Save Page Text</button>
         </section>
       </>
     </div>
-  </div>
-  {keyPickerFor !== null && (
-    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/50 p-3 sm:items-center" onMouseDown={(e) => { if (e.target === e.currentTarget) setKeyPickerFor(null); }}>
-      <div className="max-h-[80vh] w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b px-4 py-3">
-          <div><div className="font-semibold text-slate-900">Select field</div><div className="text-xs text-slate-500">Line {keyPickerFor + 1}</div></div>
-          <button type="button" onClick={() => setKeyPickerFor(null)} className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-lg">×</button>
-        </div>
-        <div className="max-h-[65vh] overflow-y-auto p-3">
-          {VALUATION_KEYS.filter(([short]) => !usedKeys.has(short) || lineKeys[keyPickerFor] === short).map(([short, label]) => (
-            <button key={short} type="button" onClick={() => selectKey(keyPickerFor, short)} className={`mb-2 flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left ${lineKeys[keyPickerFor] === short ? 'border-blue-500 bg-blue-50' : 'border-slate-200 bg-white hover:bg-slate-50'}`}>
-              <span className="font-semibold text-slate-900">{short}</span><span className="ml-3 text-sm text-slate-500">{label}</span>
-            </button>
-          ))}
-          {!VALUATION_KEYS.some(([short]) => !usedKeys.has(short) || lineKeys[keyPickerFor] === short) && <div className="p-4 text-center text-sm text-slate-500">All available fields have been selected.</div>}
-        </div>
-      </div>
-    </div>
-  )}
-  {showCorners && <FourCornerCrop imageUrl={page.imageUrl} onApply={applyCorners} onCancel={() => setShowCorners(false)} />}
-</div>;
+  </div>{showCorners && <FourCornerCrop imageUrl={page.imageUrl} onApply={applyCorners} onCancel={() => setShowCorners(false)} />}</div>;
 }
