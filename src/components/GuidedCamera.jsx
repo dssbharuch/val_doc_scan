@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 
-const BASE_WIDTH = 0.40;
-const BASE_HEIGHT = 0.18;
+const BASE_WIDTH = 0.72;
+const BASE_HEIGHT = 0.08;
+const MIN_WIDTH = 0.72;
+const MIN_HEIGHT = 0.08;
 
 export default function GuidedCamera({ onCapture, onClose }) {
   const videoRef=useRef(null), streamRef=useRef(null);
@@ -34,7 +36,9 @@ export default function GuidedCamera({ onCapture, onClose }) {
     if(!fullPage){
       cw=Math.max(2,Math.min(vw,Math.round(vw*BASE_WIDTH*widthScale)));
       ch=Math.max(2,Math.min(vh,Math.round(vh*BASE_HEIGHT*heightScale)));
-      sx=Math.max(0,Math.round((vw-cw)/2));sy=Math.max(0,Math.round((vh-ch)/2));
+      sx=Math.max(0,Math.round((vw-cw)/2));
+      // Keep the default one-line scan frame near the top of the camera view.
+      sy=Math.max(0,Math.min(vh-ch,Math.round(vh*0.18)));
     }
     const c=document.createElement("canvas");c.width=cw;c.height=ch;
     const ctx=c.getContext("2d");if(!ctx)return;
@@ -46,14 +50,14 @@ export default function GuidedCamera({ onCapture, onClose }) {
     },"image/jpeg",0.94);
   }
 
-  const fw=Math.min(92,BASE_WIDTH*widthScale*100),fh=Math.min(82,BASE_HEIGHT*heightScale*100);
+  const fw=Math.min(92,Math.max(MIN_WIDTH*100,BASE_WIDTH*widthScale*100)),fh=Math.min(60,Math.max(MIN_HEIGHT*100,BASE_HEIGHT*heightScale*100));
   return <div className="fixed inset-0 z-[100] bg-black text-white">
     <div className="relative h-full w-full overflow-hidden">
       <video ref={videoRef} muted playsInline className="absolute inset-0 h-full w-full object-cover"/>
       <div className="pointer-events-none absolute inset-0 bg-black/45">
-        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-xl shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]" style={{width:`${fw}%`,height:`${fh}%`}}/>
+        <div className="absolute left-1/2 top-[18%] -translate-x-1/2 rounded-xl shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]" style={{width:`${fw}%`,height:`${fh}%`}}/>
       </div>
-      <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" style={{width:`${fw}%`,height:`${fh}%`}}>
+      <div className="pointer-events-none absolute left-1/2 top-[18%] -translate-x-1/2" style={{width:`${fw}%`,height:`${fh}%`}}>
         <div className="absolute inset-0 rounded-xl border-2 border-white/90"/>
         <div className="absolute -left-0.5 -top-0.5 h-8 w-8 rounded-tl-xl border-l-4 border-t-4 border-blue-400"/>
         <div className="absolute -right-0.5 -top-0.5 h-8 w-8 rounded-tr-xl border-r-4 border-t-4 border-blue-400"/>
@@ -68,8 +72,8 @@ export default function GuidedCamera({ onCapture, onClose }) {
       {error&&<div className="absolute left-4 right-4 top-20 rounded-xl bg-red-600/90 p-4 text-sm">{error}</div>}
       <div className="absolute bottom-28 left-1/2 z-10 w-[92%] max-w-md -translate-x-1/2 rounded-2xl bg-black/65 p-3 backdrop-blur">
         <div className="grid grid-cols-[44px_1fr] items-center gap-2 text-xs">
-          <span>↔ W</span><input type="range" min=".60" max="2.30" step=".05" value={widthScale} onChange={e=>setWidthScale(+e.target.value)}/>
-          <span>↕ H</span><input type="range" min=".60" max="3.20" step=".05" value={heightScale} onChange={e=>setHeightScale(+e.target.value)}/>
+          <span>↔ W</span><input type="range" min="1" max="2.30" step=".05" value={widthScale} onChange={e=>setWidthScale(+e.target.value)}/>
+          <span>↕ H</span><input type="range" min="1" max="3.20" step=".05" value={heightScale} onChange={e=>setHeightScale(+e.target.value)}/>
         </div>
       </div>
       <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/85 to-transparent p-5 pt-20">
