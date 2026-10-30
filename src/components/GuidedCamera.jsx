@@ -18,6 +18,10 @@ export default function GuidedCamera({ onFinish, onClose, initialLines = [] }) {
   const stableSinceRef = useRef(0);
   const waitForMovementRef = useRef(false);
   const widthDragRef = useRef(null);
+  const manualButtonDragRef = useRef(null);
+  const manualButtonLongPressRef = useRef(false);
+  const manualButtonMovedRef = useRef(false);
+  const manualButtonTimerRef = useRef(null);
 
   const [error, setError] = useState("");
   const [ready, setReady] = useState(false);
@@ -28,6 +32,18 @@ export default function GuidedCamera({ onFinish, onClose, initialLines = [] }) {
   const [candidate, setCandidate] = useState("");
   const [lines, setLines] = useState(Array.isArray(initialLines) ? initialLines : []);
   const [widthPct, setWidthPct] = useState(90);
+  const [manualButtonPosition, setManualButtonPosition] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("documentScanner.manualScanButtonPosition") || "null");
+      if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) {
+        return { x: Math.max(8, Math.min(92, saved.x)), y: Math.max(14, Math.min(84, saved.y)) };
+      }
+    } catch {
+      // Use the default position if saved data is unavailable.
+    }
+    return { x: 50, y: 38 };
+  });
+  const manualButtonPositionRef = useRef(manualButtonPosition);
 
   useEffect(() => {
     let active = true;
@@ -312,6 +328,65 @@ export default function GuidedCamera({ onFinish, onClose, initialLines = [] }) {
     widthDragRef.current = null;
   }
 
+  function startManualButtonPress(event) {
+    if (event.button !== undefined && event.button !== 0) return;
+    event.preventDefault();
+    manualButtonLongPressRef.current = false;
+    manualButtonMovedRef.current = false;
+    manualButtonDragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startPosition: { ...manualButtonPosition }
+    };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    manualButtonTimerRef.current = window.setTimeout(() => {
+      manualButtonLongPressRef.current = true;
+    }, 380);
+  }
+
+  function moveManualButton(event) {
+    const drag = manualButtonDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    if (!manualButtonLongPressRef.current) return;
+
+    const dx = event.clientX - drag.startX;
+    const dy = event.clientY - drag.startY;
+    if (Math.abs(dx) + Math.abs(dy) > 5) manualButtonMovedRef.current = true;
+    if (!manualButtonMovedRef.current) return;
+
+    const x = Math.max(8, Math.min(92, (event.clientX / window.innerWidth) * 100));
+    const y = Math.max(14, Math.min(84, (event.clientY / window.innerHeight) * 100));
+    const nextPosition = { x, y };
+    manualButtonPositionRef.current = nextPosition;
+    setManualButtonPosition(nextPosition);
+  }
+
+  function endManualButtonPress(event) {
+    const drag = manualButtonDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    if (manualButtonTimerRef.current) window.clearTimeout(manualButtonTimerRef.current);
+    manualButtonTimerRef.current = null;
+
+    if (manualButtonMovedRef.current) {
+      try {
+        localStorage.setItem("documentScanner.manualScanButtonPosition", JSON.stringify(manualButtonPositionRef.current));
+      } catch {
+        // The button remains movable for this session if storage is unavailable.
+      }
+    } else {
+      scanLine();
+    }
+
+    manualButtonDragRef.current = null;
+    manualButtonLongPressRef.current = false;
+    manualButtonMovedRef.current = false;
+  }
+
+  useEffect(() => () => {
+    if (manualButtonTimerRef.current) window.clearTimeout(manualButtonTimerRef.current);
+  }, []);
+
   function cycleLanguage() {
     const index = LANGUAGE_OPTIONS.findIndex((option) => option.value === ocrMode);
     const next = LANGUAGE_OPTIONS[(index + 1) % LANGUAGE_OPTIONS.length];
@@ -411,15 +486,27 @@ export default function GuidedCamera({ onFinish, onClose, initialLines = [] }) {
           </div>
         )}
 
-        {/* Centered manual scan button, directly positioned against the full camera view. */}
+        {/* Manual scan button: long-press and drag to reposition; position is remembered. */}
         <button
-          onClick={scanLine}
+          type="button"
           disabled={!ready || !workerReady || Boolean(candidate) || scanLockRef.current}
-          className="absolute left-1/2 top-[33%] z-20 flex h-[68px] w-[64px] -translate-x-1/2 items-center justify-center rounded-sm bg-black/60 shadow-lg disabled:opacity-40"
-          title="Scan this line now"
-          aria-label="Manual scan"
+          onPointerDown={startManualButtonPress}
+          onPointerMove={moveManualButton}
+          onPointerUp={endManualButtonPress}
+          onPointerCancel={endManualButtonPress}
+          onContextMenu={(event) => event.preventDefault()}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              scanLine();
+            }
+          }}
+          style={{ left: `${manualButtonPosition.x}%`, top: `${manualButtonPosition.y}%`, touchAction: "none" }}
+          className="absolute z-20 flex h-[68px] w-[64px] -translate-x-1/2 -translate-y-1/2 select-none items-center justify-center rounded-sm bg-black/60 shadow-lg disabled:opacity-40"
+          title="Tap to scan. Long-press and drag to move; position is saved."
+          aria-label="Manual scan. Tap to scan, long press to move."
         >
-          <span className="flex h-[50px] w-[50px] items-center justify-center rounded-full border border-white bg-white text-2xl font-bold text-slate-900">⌖</span>
+          <span className="pointer-events-none flex h-[50px] w-[50px] items-center justify-center rounded-full border border-white bg-white text-2xl font-bold text-slate-900">⌖</span>
         </button>
 
         {/* Bottom controls: Auto toggle left, Finish right. */}
