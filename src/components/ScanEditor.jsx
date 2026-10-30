@@ -54,13 +54,14 @@ export default function ScanEditor({
 
   const initialText = page.editedText || page.ocrText || "";
   const initialAll = splitOCRLines(initialText);
+  const isLiveScanned = Boolean(page.liveScanned);
 
   const [ocrText, setOcrText] = useState(initialText);
   const [ocrLines, setOcrLines] = useState(
-    initialAll.filter(isUsefulOCRLine)
+    isLiveScanned ? initialAll : initialAll.filter(isUsefulOCRLine)
   );
   const [hiddenOCRLines, setHiddenOCRLines] = useState(
-    initialAll.filter((line) => !isUsefulOCRLine(line))
+    isLiveScanned ? [] : initialAll.filter((line) => !isUsefulOCRLine(line))
   );
   const [showHiddenLines, setShowHiddenLines] = useState(false);
 
@@ -72,6 +73,7 @@ export default function ScanEditor({
   const [lastMergeTarget, setLastMergeTarget] = useState(null);
 
   const [status, setStatus] = useState("");
+  const [copyStatus, setCopyStatus] = useState("");
   const [progress, setProgress] = useState(0);
   const [rotation, setRotation] = useState(page.rotation || 0);
   const [zoom, setZoom] = useState(1);
@@ -923,6 +925,42 @@ export default function ScanEditor({
     }
   }
 
+  async function copyAllText() {
+    const text = ocrLines.map((line) => String(line).trim()).filter(Boolean).join("\n");
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopyStatus("All OCR rows copied. You can paste them into WhatsApp or another app.");
+    } catch (error) {
+      console.error("Clipboard copy failed:", error);
+      setCopyStatus("Copy was blocked by the browser. Please use the browser's copy permission or select the text manually.");
+    }
+  }
+
+  async function shareText() {
+    const text = ocrLines.map((line) => String(line).trim()).filter(Boolean).join("\n");
+    if (!text) return;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: "Scanned document text", text });
+      } else {
+        await navigator.clipboard.writeText(text);
+        setCopyStatus("Text copied. Paste it into the app where you want to share it.");
+      }
+    } catch (error) {
+      if (error?.name !== "AbortError") {
+        console.error("Share failed:", error);
+        setCopyStatus("Sharing is not available here. Use Copy All instead.");
+      }
+    }
+  }
+
+  function shareWhatsApp() {
+    const text = ocrLines.map((line) => String(line).trim()).filter(Boolean).join("\n");
+    if (!text) return;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer");
+  }
+
   function save() {
     const keyValues = {};
 
@@ -943,7 +981,7 @@ export default function ScanEditor({
 
     onDone({
       ...page,
-      scanMode: mode,
+      scanMode: page.liveScanned ? "live-line" : mode,
       crop: selection,
       rotation,
       ocrText,
@@ -973,7 +1011,7 @@ export default function ScanEditor({
             </div>
 
             <h2 className="font-semibold">
-              Scan & Improve OCR
+              {page.liveScanned ? "Review Scanned Lines" : "Scan & Improve OCR"}
             </h2>
           </div>
 
@@ -981,6 +1019,8 @@ export default function ScanEditor({
         </header>
 
         <div className="p-4">
+          {!page.liveScanned && (
+            <>
           <div className="overflow-hidden rounded-2xl bg-black">
             <div className="relative flex min-h-[45vh] items-center justify-center overflow-auto select-none">
               <img
@@ -1267,6 +1307,8 @@ export default function ScanEditor({
               🔄 Try Better OCR
             </button>
           </div>
+            </>
+          )}
 
           {status && (
             <div className="mt-3 rounded-xl bg-blue-50 p-3 text-sm text-blue-800">
@@ -1296,7 +1338,7 @@ export default function ScanEditor({
           <section className="mt-4 rounded-2xl bg-white p-4 shadow">
             <div className="mb-3 flex items-center justify-between gap-2">
               <h3 className="font-semibold">
-                OCR Text
+                {page.liveScanned ? "Accepted OCR Rows" : "OCR Text"}
               </h3>
 
               <button
@@ -1312,6 +1354,38 @@ export default function ScanEditor({
                 × Clear all
               </button>
             </div>
+
+            <div className="mb-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={copyAllText}
+                disabled={!ocrLines.length}
+                className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
+              >
+                📋 Copy All
+              </button>
+              <button
+                type="button"
+                onClick={shareWhatsApp}
+                disabled={!ocrLines.length}
+                className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
+              >
+                WhatsApp
+              </button>
+              <button
+                type="button"
+                onClick={shareText}
+                disabled={!ocrLines.length}
+                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-40"
+              >
+                Share to other apps
+              </button>
+            </div>
+            {copyStatus && (
+              <div className="mb-3 rounded-lg bg-emerald-50 p-2 text-xs text-emerald-800">
+                {copyStatus}
+              </div>
+            )}
 
             {ocrLines.length ? (
               <>
@@ -1513,7 +1587,7 @@ export default function ScanEditor({
               onClick={save}
               className="mt-4 w-full rounded-xl bg-emerald-600 px-4 py-3 font-semibold text-white"
             >
-              ✓ Save Page Text
+              ✓ Finish & Save Text
             </button>
           </section>
         </div>

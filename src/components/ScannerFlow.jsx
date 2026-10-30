@@ -4,16 +4,18 @@ import ScanEditor from "./ScanEditor";
 import { clearAllBatches } from "../storage/db";
 import { FIELD_LABELS } from "./fieldDefinitions";
 
-function makePage(capture, pageNumber) {
+function makePage(lines, pageNumber) {
+  const text = (Array.isArray(lines) ? lines : []).join("\n");
   return {
     id: crypto.randomUUID(),
     pageNumber,
-    imageUrl: capture.imageUrl,
+    imageUrl: null,
     processedImageUrl: null,
-    ocrText: "",
-    editedText: "",
-    photoDeleted: false,
-    scanMode: capture.scanMode || "rectangle",
+    ocrText: text,
+    editedText: text,
+    photoDeleted: true,
+    liveScanned: true,
+    scanMode: "live-line",
     keyValues: {}
   };
 }
@@ -88,23 +90,21 @@ export default function ScannerFlow() {
   const [currentPage, setCurrentPage] = useState(null);
   const [savedPages, setSavedPages] = useState([]);
   const [showExport, setShowExport] = useState(false);
+  const [liveScanLines, setLiveScanLines] = useState([]);
 
   // Keys already selected in this scanning session
   const [usedKeys, setUsedKeys] = useState([]);
 
   function openCamera() {
+    setLiveScanLines([]);
     setCameraOpen(true);
   }
 
-  function handleCapture(capture) {
+  function handleLiveFinish(lines) {
+    const acceptedLines = Array.isArray(lines) ? lines : [];
+    setLiveScanLines(acceptedLines);
     setCameraOpen(false);
-
-    const page = makePage(
-      capture,
-      savedPages.length + 1
-    );
-
-    setCurrentPage(page);
+    setCurrentPage(makePage(acceptedLines, savedPages.length + 1));
   }
 
   function handlePageDone(page) {
@@ -162,6 +162,7 @@ export default function ScannerFlow() {
     });
 
     setCurrentPage(null);
+    setLiveScanLines([]);
   }
 
   function handlePageCancel() {
@@ -172,6 +173,7 @@ export default function ScannerFlow() {
     }
 
     setCurrentPage(null);
+    setLiveScanLines([]);
   }
 
   function handleRetake() {
@@ -295,6 +297,7 @@ export default function ScannerFlow() {
     setCurrentPage(null);
     setCameraOpen(false);
     setShowExport(false);
+    setLiveScanLines([]);
     setUsedKeys([]);
   }
 
@@ -355,7 +358,7 @@ export default function ScannerFlow() {
                     </span>
 
                     <span className="text-xs text-emerald-700">
-                      ✓ Photo deleted
+                      {page.liveScanned ? "✓ Text scanned" : "✓ Photo deleted"}
                     </span>
                   </div>
 
@@ -374,8 +377,12 @@ export default function ScannerFlow() {
 
       {cameraOpen && (
         <GuidedCamera
-          onCapture={handleCapture}
-          onClose={() => setCameraOpen(false)}
+          initialLines={liveScanLines}
+          onFinish={handleLiveFinish}
+          onClose={() => {
+            setCameraOpen(false);
+            setLiveScanLines([]);
+          }}
         />
       )}
 
