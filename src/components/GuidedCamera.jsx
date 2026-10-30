@@ -337,7 +337,7 @@ export default function GuidedCamera({ onFinish, onClose, initialLines = [] }) {
 
         {/* Full preview remains clear. The frame is a fixed-height strip. */}
         <div
-          className="absolute left-1/2 top-1/2 h-[76px] -translate-x-1/2 -translate-y-1/2 rounded-lg border-2 border-white/95"
+          className="absolute left-1/2 top-[13%] h-[76px] -translate-x-1/2 rounded-lg border-2 border-white/95"
           style={{ width: `${widthPct}%` }}
         >
           <div
@@ -369,10 +369,11 @@ export default function GuidedCamera({ onFinish, onClose, initialLines = [] }) {
           />
         </div>
 
-        <header className="absolute left-0 right-0 top-0 flex items-center justify-between gap-2 p-3">
-          <button onClick={onClose} className="rounded-full bg-black/65 px-3 py-2 text-sm">✕</button>
+        {/* Keep the small controls together at the very top, away from the scan frame. */}
+        <header className="absolute left-0 right-0 top-0 z-30 flex items-center justify-between gap-2 p-3 pt-[max(12px,env(safe-area-inset-top))]">
+          <button onClick={onClose} className="rounded-full bg-black/70 px-3.5 py-2.5 text-sm font-semibold">✕</button>
           <div className="rounded-full bg-black/65 px-3 py-2 text-xs">Live Scan · {lines.length}</div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <button onClick={cycleLanguage} className="rounded-lg bg-black/70 px-2.5 py-2 text-xs font-bold">
               {LANGUAGE_OPTIONS.find((option) => option.value === ocrMode)?.label || "ENG"}
             </button>
@@ -393,46 +394,51 @@ export default function GuidedCamera({ onFinish, onClose, initialLines = [] }) {
           </div>
         )}
 
-        {candidate && (
-          <div className="absolute bottom-28 left-3 right-3 z-20 mx-auto max-w-xl rounded-xl bg-white p-2.5 text-slate-900 shadow-xl">
-            <textarea
-              value={candidate}
-              onChange={(event) => setCandidate(event.target.value)}
-              rows={2}
-              autoFocus
-              className="w-full rounded-lg border border-slate-300 p-2 text-base outline-none focus:border-blue-500"
-            />
-            <div className="mt-2 flex justify-end gap-2">
-              <button onClick={rejectLine} className="rounded-lg bg-red-100 px-4 py-2 text-sm font-bold text-red-700">✕</button>
-              <button onClick={acceptLine} disabled={!candidate.trim()} className="rounded-lg bg-emerald-600 px-5 py-2 text-sm font-bold text-white disabled:opacity-40">✓</button>
-            </div>
-          </div>
-        )}
+        {/* OCR result area sits below the scan trigger, matching the requested right-side layout. */}
+        <div className="absolute left-[4%] right-[4%] top-[41%] z-20 mx-auto h-[18%] min-h-[112px] max-h-[160px] overflow-hidden bg-white/65 p-2.5 text-slate-900 shadow-sm">
+          {candidate ? (
+            <>
+              <textarea
+                value={candidate}
+                onChange={(event) => setCandidate(event.target.value)}
+                rows={2}
+                autoFocus
+                className="h-[calc(100%-42px)] min-h-[52px] w-full resize-none rounded-lg border border-slate-300 bg-white p-2 text-base outline-none focus:border-blue-500"
+              />
+              <div className="mt-1.5 flex justify-end gap-2">
+                <button onClick={rejectLine} className="rounded-lg bg-red-100 px-4 py-1.5 text-sm font-bold text-red-700">✕</button>
+                <button onClick={acceptLine} disabled={!candidate.trim()} className="rounded-lg bg-emerald-600 px-5 py-1.5 text-sm font-bold text-white disabled:opacity-40">✓</button>
+              </div>
+            </>
+          ) : (
+            <div className="h-full w-full" aria-live="polite" />
+          )}
+        </div>
 
-        <div className="absolute bottom-0 left-0 right-0 z-10 flex items-center justify-between gap-2 bg-gradient-to-t from-black/90 to-transparent p-4 pt-16">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setAutoScan((value) => !value)}
-              className={`rounded-full px-3 py-2 text-xs font-semibold ${autoScan ? "bg-emerald-600 text-white" : "bg-white/15 text-white"}`}
-              title="Toggle automatic scanning"
-            >
-              {autoScan ? "AUTO ON" : "AUTO OFF"}
-            </button>
-            <button
-              onClick={scanLine}
-              disabled={!ready || !workerReady || Boolean(candidate) || scanLockRef.current}
-              className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-lg font-bold text-slate-900 disabled:opacity-40"
-              title="Scan this line now"
-              aria-label="Manual scan"
-            >
-              <span className="sr-only">Manual scan</span>
-              ⌖
-            </button>
-          </div>
+        {/* Centered manual scan button, directly positioned against the full camera view. */}
+        <button
+          onClick={scanLine}
+          disabled={!ready || !workerReady || Boolean(candidate) || scanLockRef.current}
+          className="absolute left-1/2 top-[33%] z-20 flex h-[68px] w-[64px] -translate-x-1/2 items-center justify-center rounded-sm bg-black/60 shadow-lg disabled:opacity-40"
+          title="Scan this line now"
+          aria-label="Manual scan"
+        >
+          <span className="flex h-[50px] w-[50px] items-center justify-center rounded-full border border-white bg-white text-2xl font-bold text-slate-900">⌖</span>
+        </button>
+
+        {/* Bottom controls: Auto toggle left, Finish right. */}
+        <div className="absolute bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-black/90 to-transparent p-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-16">
+          <button
+            onClick={() => setAutoScan((value) => !value)}
+            className={`absolute bottom-[max(20px,env(safe-area-inset-bottom))] left-4 rounded-full px-4 py-3 text-xs font-bold shadow-lg ${autoScan ? "bg-emerald-600 text-white" : "bg-white/20 text-white"}`}
+            title="Toggle automatic scanning"
+          >
+            {autoScan ? "AUTO ON" : "AUTO OFF"}
+          </button>
           <button
             onClick={finish}
             disabled={!lines.length}
-            className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold disabled:opacity-40"
+            className="absolute bottom-[max(20px,env(safe-area-inset-bottom))] right-4 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold shadow-lg disabled:opacity-40"
           >
             Finish ({lines.length})
           </button>
