@@ -91,6 +91,8 @@ export default function ScannerFlow() {
   const [savedPages, setSavedPages] = useState([]);
   const [showExport, setShowExport] = useState(false);
   const [liveScanLines, setLiveScanLines] = useState([]);
+  const [showSharePreview, setShowSharePreview] = useState(false);
+  const [shareDraft, setShareDraft] = useState("");
 
   // Keys already selected in this scanning session
   const [usedKeys, setUsedKeys] = useState([]);
@@ -103,8 +105,30 @@ export default function ScannerFlow() {
   function handleLiveFinish(lines) {
     const acceptedLines = Array.isArray(lines) ? lines : [];
     setLiveScanLines(acceptedLines);
+    setShareDraft(acceptedLines.join("\n"));
     setCameraOpen(false);
-    setCurrentPage(makePage(acceptedLines, savedPages.length + 1));
+    setShowSharePreview(true);
+  }
+
+  async function copyShareDraft() {
+    try {
+      await navigator.clipboard.writeText(shareDraft);
+      window.alert("Text copied. You can paste it into WhatsApp or any other app.");
+    } catch {
+      window.alert("Copy was blocked by the browser. Select the text and copy it manually.");
+    }
+  }
+
+  function openWhatsAppShare() {
+    const url = `https://wa.me/?text=${encodeURIComponent(shareDraft)}`;
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+
+  function continueToEditor() {
+    const editedLines = shareDraft.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    setLiveScanLines(editedLines);
+    setCurrentPage(makePage(editedLines, savedPages.length + 1));
+    setShowSharePreview(false);
   }
 
   function handlePageDone(page) {
@@ -297,6 +321,8 @@ export default function ScannerFlow() {
     setCurrentPage(null);
     setCameraOpen(false);
     setShowExport(false);
+    setShowSharePreview(false);
+    setShareDraft("");
     setLiveScanLines([]);
     setUsedKeys([]);
   }
@@ -394,6 +420,32 @@ export default function ScannerFlow() {
           onCancel={handlePageCancel}
           onRetake={handleRetake}
         />
+      )}
+
+      {showSharePreview && (
+        <div className="fixed inset-0 z-[120] flex items-end justify-center bg-black/60 p-3 sm:items-center">
+          <div className="w-full max-w-xl rounded-2xl bg-white p-4 text-slate-900 shadow-2xl">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold">Review scanned text</h2>
+                <p className="text-xs text-slate-500">Edit the text before copying or sharing.</p>
+              </div>
+              <button onClick={() => setShowSharePreview(false)} className="h-9 w-9 rounded-full bg-slate-100 text-xl">×</button>
+            </div>
+            <textarea
+              value={shareDraft}
+              onChange={(event) => setShareDraft(event.target.value)}
+              rows={10}
+              className="w-full rounded-xl border border-slate-300 p-3 text-sm leading-6 outline-none focus:border-blue-500"
+              placeholder="Scanned text will appear here..."
+            />
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button onClick={copyShareDraft} className="rounded-xl border border-slate-300 px-3 py-3 text-sm font-semibold">Copy Text</button>
+              <button onClick={openWhatsAppShare} disabled={!shareDraft.trim()} className="rounded-xl bg-emerald-600 px-3 py-3 text-sm font-semibold text-white disabled:opacity-40">Share to WhatsApp</button>
+            </div>
+            <button onClick={continueToEditor} disabled={!shareDraft.trim()} className="mt-2 w-full rounded-xl bg-blue-600 px-3 py-3 text-sm font-semibold text-white disabled:opacity-40">Continue to Edit & Save</button>
+          </div>
+        </div>
       )}
 
       {showExport && (

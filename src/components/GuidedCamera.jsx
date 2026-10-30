@@ -394,26 +394,22 @@ export default function GuidedCamera({ onFinish, onClose, initialLines = [] }) {
           </div>
         )}
 
-        {/* OCR result area sits below the scan trigger, matching the requested right-side layout. */}
-        <div className="absolute left-[4%] right-[4%] top-[41%] z-20 mx-auto h-[18%] min-h-[112px] max-h-[160px] overflow-hidden bg-white/65 p-2.5 text-slate-900 shadow-sm">
-          {candidate ? (
-            <>
-              <textarea
-                value={candidate}
-                onChange={(event) => setCandidate(event.target.value)}
-                rows={2}
-                autoFocus
-                className="h-[calc(100%-42px)] min-h-[52px] w-full resize-none rounded-lg border border-slate-300 bg-white p-2 text-base outline-none focus:border-blue-500"
-              />
-              <div className="mt-1.5 flex justify-end gap-2">
-                <button onClick={rejectLine} className="rounded-lg bg-red-100 px-4 py-1.5 text-sm font-bold text-red-700">✕</button>
-                <button onClick={acceptLine} disabled={!candidate.trim()} className="rounded-lg bg-emerald-600 px-5 py-1.5 text-sm font-bold text-white disabled:opacity-40">✓</button>
-              </div>
-            </>
-          ) : (
-            <div className="h-full w-full" aria-live="polite" />
-          )}
-        </div>
+        {/* Show the result panel only after OCR detects text; never show an empty grey box. */}
+        {candidate && (
+          <div className="absolute left-[4%] right-[4%] top-[41%] z-20 mx-auto max-h-[160px] overflow-hidden rounded-xl bg-white/95 p-2.5 text-slate-900 shadow-lg">
+            <textarea
+              value={candidate}
+              onChange={(event) => setCandidate(event.target.value)}
+              rows={2}
+              autoFocus
+              className="max-h-[90px] min-h-[52px] w-full resize-y rounded-lg border border-slate-300 bg-white p-2 text-base outline-none focus:border-blue-500"
+            />
+            <div className="mt-1.5 flex justify-end gap-2">
+              <button onClick={rejectLine} className="rounded-lg bg-red-100 px-4 py-1.5 text-sm font-bold text-red-700">✕</button>
+              <button onClick={acceptLine} disabled={!candidate.trim()} className="rounded-lg bg-emerald-600 px-5 py-1.5 text-sm font-bold text-white disabled:opacity-40">✓</button>
+            </div>
+          </div>
+        )}
 
         {/* Centered manual scan button, directly positioned against the full camera view. */}
         <button
