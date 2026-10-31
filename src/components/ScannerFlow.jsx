@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import GuidedCamera from "./GuidedCamera";
+import GalleryScanner from "./GalleryScanner";
 import ScanEditor from "./ScanEditor";
 import { clearAllBatches } from "../storage/db";
 import { FIELD_LABELS } from "./fieldDefinitions";
@@ -87,6 +88,7 @@ function ExportDataModal({ data, pages, onClose }) {
 
 export default function ScannerFlow() {
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [galleryUrl, setGalleryUrl] = useState(null);
   const [currentPage, setCurrentPage] = useState(null);
   const [savedPages, setSavedPages] = useState([]);
   const [showExport, setShowExport] = useState(false);
@@ -103,6 +105,7 @@ export default function ScannerFlow() {
   }
 
   function handleLiveFinish(lines) {
+    setGalleryUrl(null);
     const acceptedLines = Array.isArray(lines) ? lines : [];
     setLiveScanLines(acceptedLines);
     setShareDraft(acceptedLines.join("\n"));
@@ -320,6 +323,7 @@ export default function ScannerFlow() {
     setSavedPages([]);
     setCurrentPage(null);
     setCameraOpen(false);
+    setGalleryUrl(null);
     setShowExport(false);
     setShowSharePreview(false);
     setShareDraft("");
@@ -358,6 +362,17 @@ export default function ScannerFlow() {
           >
             📷 Scan New Page
           </button>
+
+          <label className="mt-3 block w-full cursor-pointer rounded-xl bg-indigo-600 px-4 py-4 text-center font-semibold text-white">
+            🖼️ Scan Photo from Gallery
+            <input type="file" accept="image/jpeg,image/png,image/webp,image/*" className="hidden" onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+              if (!file) return;
+              setLiveScanLines([]);
+              setGalleryUrl(URL.createObjectURL(file));
+            }} />
+          </label>
 
           <button
             onClick={() => setShowExport(true)}
@@ -409,6 +424,15 @@ export default function ScannerFlow() {
             setCameraOpen(false);
             setLiveScanLines([]);
           }}
+        />
+      )}
+
+      {galleryUrl && (
+        <GalleryScanner
+          imageUrl={galleryUrl}
+          initialLines={liveScanLines}
+          onFinish={handleLiveFinish}
+          onClose={() => { setGalleryUrl(null); setLiveScanLines([]); }}
         />
       )}
 
