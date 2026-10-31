@@ -1,26 +1,17 @@
-Live Line OCR – Gallery Photo Manual Scan Update
+Gallery Photo Loading Fix (2026-10-31)
 
-આ ZIP અગાઉની live-line-ocr-draggable-button-update.zip પરથી બનાવવામાં આવી છે.
+ફોટો પસંદ કર્યા પછી "Selected photo could not be loaded" Error આવતો હતો.
+સંભવિત કારણ: GalleryScannerમાં React effect cleanup વખતે Blob URL વહેલું revoke થતું હતું.
+હવે URLની જવાબદારી ScannerFlow પાસે છે; GalleryScannerમાં વહેલું revoke બંધ કર્યું છે.
+Gallery બંધ/Finish થતાં URL થોડા સમય પછી release થાય છે.
 
-નવી સુવિધા:
-- Scan Photo from Gallery: JPG/PNG/WEBP ફોટો પસંદ કરો.
-- ફોટો Drag કરીને ખસેડો; બે આંગળીથી Pinch Zoom અથવા PC પર Mouse Wheelથી Zoom કરો.
-- Camera જેવો જ એક-લાઇન Scan Box, Cyan Line અને બન્ને બાજુથી Width Resize.
-- આખો ફોટો સરખો દેખાય છે; Box બહાર Dark Overlay નથી.
-- Galleryમાં Auto Scan નથી. ફક્ત Manual Scan બટનથી OCR થશે.
-- OCR પછી Text Edit, Reject (✕), Accept (✓), Finish અને Share Preview એ જ Flowમાં છે.
-- Manual Scan બટન લાંબું દબાવી Drag કરી શકાય છે; તેની જગ્યા અગાઉની જેમ સેવ થાય છે.
-- Camera Scannerના હાલના Auto/Manual Scanમાં ફેરફાર નથી.
+ફેરફાર કરેલી ફાઇલો:
+- src/components/GalleryScanner.jsx
+- src/components/ScannerFlow.jsx
 
-ફાઇલો:
-src/components/GuidedCamera.jsx (જૂની ફાઇલ યથાવત)
-src/components/GalleryScanner.jsx (નવી)
-src/components/ScannerFlow.jsx (Gallery બટન અને Flow)
-src/components/ScanEditor.jsx (જૂની ફાઇલ યથાવત)
+બીજી ફાઇલો, Camera Scanner અને OCR logic બદલ્યા નથી.
+જૂના React projectમાં ઉપરની બે ફાઇલો replace કરો અને rebuild/redeploy કરો.
 
-તમારા મૂળ React Projectમાં આ ફાઇલો src/components/માં Replace/Add કરો.
-Projectની બીજી dependencies (Tesseract, Tailwind, storage, fieldDefinitions) પહેલાની જેમ જરૂરી છે.
-આ ZIP સંપૂર્ણ standalone React Project નથી; માત્ર update files છે.
-
-પછી npm run build અને મોબાઇલ તથા PCમાં ચકાસો.
-નોંધ: અહીં પૂર્ણ App/Browser Test શક્ય થયો નથી; Gallery Zoom/Scan અને OCR ચકાસીને Deploy કરો.
+Test: JPG/PNG ફોટો પસંદ કરો, Scan, Tick, Finish અને Camera Scan ચકાસો.
+HEIC ફોર્મેટ Browserમાં સપોર્ટ ન હોય તો JPGમાં convert કરો.
+Live Browser ટેસ્ટ હજી કર્યો નથી.

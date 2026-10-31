@@ -45,7 +45,8 @@ export default function GalleryScanner({ imageUrl, onFinish, onClose, initialLin
   });
   const manualButtonPositionRef = useRef(manualButtonPosition);
 
-  useEffect(() => () => { if (imageUrl?.startsWith("blob:")) URL.revokeObjectURL(imageUrl); }, [imageUrl]);
+  // The parent owns the selected photo URL. Do not revoke it during
+  // React StrictMode effect cleanup: the image may still be loading.
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const panRef = useRef({ x: 0, y: 0 });
