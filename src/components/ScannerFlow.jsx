@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import GuidedCamera from "./GuidedCamera";
 import GalleryScanner from "./GalleryScanner";
 import ScanEditor from "./ScanEditor";
@@ -89,13 +89,6 @@ function ExportDataModal({ data, pages, onClose }) {
 export default function ScannerFlow() {
   const [cameraOpen, setCameraOpen] = useState(false);
   const [galleryUrl, setGalleryUrl] = useState(null);
-  const galleryUrlRef = useRef(null);
-  function closeGallery() {
-    const oldUrl = galleryUrlRef.current;
-    galleryUrlRef.current = null;
-    setGalleryUrl(null);
-    if (oldUrl) window.setTimeout(() => URL.revokeObjectURL(oldUrl), 1000);
-  }
   const [currentPage, setCurrentPage] = useState(null);
   const [savedPages, setSavedPages] = useState([]);
   const [showExport, setShowExport] = useState(false);
@@ -112,7 +105,7 @@ export default function ScannerFlow() {
   }
 
   function handleLiveFinish(lines) {
-    closeGallery();
+    setGalleryUrl(null);
     const acceptedLines = Array.isArray(lines) ? lines : [];
     setLiveScanLines(acceptedLines);
     setShareDraft(acceptedLines.join("\n"));
@@ -330,7 +323,7 @@ export default function ScannerFlow() {
     setSavedPages([]);
     setCurrentPage(null);
     setCameraOpen(false);
-    closeGallery();
+    setGalleryUrl(null);
     setShowExport(false);
     setShowSharePreview(false);
     setShareDraft("");
@@ -377,14 +370,7 @@ export default function ScannerFlow() {
               event.target.value = "";
               if (!file) return;
               setLiveScanLines([]);
-              if (!file.type.startsWith("image/")) {
-                window.alert("Please select a JPG, PNG or WEBP image. HEIC photos may need conversion to JPG.");
-                return;
-              }
-              closeGallery();
-              const url = URL.createObjectURL(file);
-              galleryUrlRef.current = url;
-              setGalleryUrl(url);
+              setGalleryUrl(URL.createObjectURL(file));
             }} />
           </label>
 
@@ -446,7 +432,7 @@ export default function ScannerFlow() {
           imageUrl={galleryUrl}
           initialLines={liveScanLines}
           onFinish={handleLiveFinish}
-          onClose={() => { closeGallery(); setLiveScanLines([]); }}
+          onClose={() => { setGalleryUrl(null); setLiveScanLines([]); }}
         />
       )}
 

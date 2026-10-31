@@ -30,6 +30,7 @@ export default function GalleryScanner({ imageUrl, onFinish, onClose, initialLin
 
   const [workerReady, setWorkerReady] = useState(false);
   const [candidate, setCandidate] = useState("");
+  const [scanning, setScanning] = useState(false);
   const [lines, setLines] = useState(Array.isArray(initialLines) ? initialLines : []);
   const [widthPct, setWidthPct] = useState(90);
   const [manualButtonPosition, setManualButtonPosition] = useState(() => {
@@ -45,8 +46,7 @@ export default function GalleryScanner({ imageUrl, onFinish, onClose, initialLin
   });
   const manualButtonPositionRef = useRef(manualButtonPosition);
 
-  // The parent owns the selected photo URL. Do not revoke it during
-  // React StrictMode effect cleanup: the image may still be loading.
+  useEffect(() => () => { if (imageUrl?.startsWith("blob:")) URL.revokeObjectURL(imageUrl); }, [imageUrl]);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const panRef = useRef({ x: 0, y: 0 });
@@ -212,8 +212,11 @@ export default function GalleryScanner({ imageUrl, onFinish, onClose, initialLin
   }, []);
 
   const scanLine = useCallback(async () => {
-    if (scanLockRef.current || candidate || !ready || !workerReady || !workerRef.current) return;
+    if (scanLockRef.current || !ready || !workerReady || !workerRef.current) return;
     scanLockRef.current = true;
+    setScanning(true);
+    setCandidate("");
+    setError("");
     try {
       const canvas = makeLineCanvas();
       if (!canvas) return;
@@ -235,17 +238,11 @@ export default function GalleryScanner({ imageUrl, onFinish, onClose, initialLin
       console.warn("Line OCR attempt failed:", err);
     } finally {
       scanLockRef.current = false;
+      setScanning(false);
     }
-  }, [candidate, ready, workerReady, makeLineCanvas, playBeep]);
+  }, [ready, workerReady, makeLineCanvas, playBeep]);
 
   // Gallery scanning is manual only: no camera frame loop or automatic OCR.
-
-  function rejectLine() {
-    setCandidate("");
-    waitForMovementRef.current = false;
-    stableSinceRef.current = 0;
-    previousFrameRef.current = null;
-  }
 
   function acceptLine() {
     const clean = candidate.trim();
@@ -442,7 +439,18 @@ export default function GalleryScanner({ imageUrl, onFinish, onClose, initialLin
               className="max-h-[90px] min-h-[52px] w-full resize-y rounded-lg border border-slate-300 bg-white p-2 text-base outline-none focus:border-blue-500"
             />
             <div className="mt-1.5 flex justify-end gap-2">
-              <button onClick={rejectLine} className="rounded-lg bg-red-100 px-4 py-1.5 text-sm font-bold text-red-700">✕</button>
+              <button
+                type="button"
+                onClick={() => {
+                  setCandidate("");
+                  stableSinceRef.current = Date.now();
+                  waitForMovementRef.current = false;
+                }}
+                disabled={!candidate.trim()}
+                aria-label="Reject this scan and scan the same line again"
+                title="Reject and scan again"
+                className="rounded-lg bg-rose-100 px-5 py-1.5 text-sm font-bold text-rose-700 disabled:opacity-40"
+              >✕</button>
               <button onClick={acceptLine} disabled={!candidate.trim()} className="rounded-lg bg-emerald-600 px-5 py-1.5 text-sm font-bold text-white disabled:opacity-40">✓</button>
             </div>
           </div>
@@ -451,7 +459,7 @@ export default function GalleryScanner({ imageUrl, onFinish, onClose, initialLin
         {/* Manual scan button: long-press and drag to reposition; position is remembered. */}
         <button
           type="button"
-          disabled={!ready || !workerReady || Boolean(candidate) || scanLockRef.current}
+          disabled={!ready || !workerReady || scanning}
           onPointerDown={startManualButtonPress}
           onPointerMove={moveManualButton}
           onPointerUp={endManualButtonPress}
@@ -465,10 +473,10 @@ export default function GalleryScanner({ imageUrl, onFinish, onClose, initialLin
           }}
           style={{ left: `${manualButtonPosition.x}%`, top: `${manualButtonPosition.y}%`, touchAction: "none" }}
           className="absolute z-20 flex h-[68px] w-[64px] -translate-x-1/2 -translate-y-1/2 select-none items-center justify-center rounded-sm bg-black/60 shadow-lg disabled:opacity-40"
-          title="Tap to scan. Long-press and drag to move; position is saved."
-          aria-label="Manual scan. Tap to scan, long press to move."
+          title="Tap to scan again and replace the displayed OCR text. Long-press and drag to move; position is saved."
+          aria-label="Manual scan. Tap to scan or scan again, long press to move."
         >
-          <span className="pointer-events-none flex h-[50px] w-[50px] items-center justify-center rounded-full border border-white bg-white text-2xl font-bold text-slate-900">⌖</span>
+          <span className="pointer-events-none flex h-[50px] w-[50px] items-center justify-center rounded-full border border-white bg-white text-2xl font-bold text-slate-900">{scanning ? "…" : "⌖"}</span>
         </button>
 
         {/* Bottom controls: Auto toggle left, Finish right. */}

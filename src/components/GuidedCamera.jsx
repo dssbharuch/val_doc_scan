@@ -198,8 +198,9 @@ export default function GuidedCamera({ onFinish, onClose, initialLines = [] }) {
   }, []);
 
   const scanLine = useCallback(async () => {
-    if (scanLockRef.current || candidate || !ready || !workerReady || !workerRef.current) return;
+    if (scanLockRef.current || !ready || !workerReady || !workerRef.current) return;
     scanLockRef.current = true;
+    setCandidate("");
     try {
       const canvas = makeLineCanvas();
       if (!canvas) return;
@@ -222,7 +223,7 @@ export default function GuidedCamera({ onFinish, onClose, initialLines = [] }) {
     } finally {
       scanLockRef.current = false;
     }
-  }, [candidate, ready, workerReady, makeLineCanvas, playBeep]);
+  }, [ready, workerReady, makeLineCanvas, playBeep]);
 
   // Detect a steady camera/document image before running OCR.
   // This avoids repeatedly running Tesseract while the user is moving the page.
@@ -286,12 +287,6 @@ export default function GuidedCamera({ onFinish, onClose, initialLines = [] }) {
     };
   }, [ready, workerReady, autoScan, candidate, makeLineCanvas, scanLine]);
 
-  function rejectLine() {
-    setCandidate("");
-    waitForMovementRef.current = false;
-    stableSinceRef.current = 0;
-    previousFrameRef.current = null;
-  }
 
   function acceptLine() {
     const clean = candidate.trim();
@@ -480,7 +475,18 @@ export default function GuidedCamera({ onFinish, onClose, initialLines = [] }) {
               className="max-h-[90px] min-h-[52px] w-full resize-y rounded-lg border border-slate-300 bg-white p-2 text-base outline-none focus:border-blue-500"
             />
             <div className="mt-1.5 flex justify-end gap-2">
-              <button onClick={rejectLine} className="rounded-lg bg-red-100 px-4 py-1.5 text-sm font-bold text-red-700">✕</button>
+              <button
+                type="button"
+                onClick={() => {
+                  setCandidate("");
+                  stableSinceRef.current = Date.now();
+                  waitForMovementRef.current = false;
+                }}
+                disabled={!candidate.trim()}
+                aria-label="Reject this scan and scan the same line again"
+                title="Reject and scan again"
+                className="rounded-lg bg-rose-100 px-5 py-1.5 text-sm font-bold text-rose-700 disabled:opacity-40"
+              >✕</button>
               <button onClick={acceptLine} disabled={!candidate.trim()} className="rounded-lg bg-emerald-600 px-5 py-1.5 text-sm font-bold text-white disabled:opacity-40">✓</button>
             </div>
           </div>
@@ -489,7 +495,7 @@ export default function GuidedCamera({ onFinish, onClose, initialLines = [] }) {
         {/* Manual scan button: long-press and drag to reposition; position is remembered. */}
         <button
           type="button"
-          disabled={!ready || !workerReady || Boolean(candidate) || scanLockRef.current}
+          disabled={!ready || !workerReady || scanLockRef.current}
           onPointerDown={startManualButtonPress}
           onPointerMove={moveManualButton}
           onPointerUp={endManualButtonPress}
@@ -503,7 +509,7 @@ export default function GuidedCamera({ onFinish, onClose, initialLines = [] }) {
           }}
           style={{ left: `${manualButtonPosition.x}%`, top: `${manualButtonPosition.y}%`, touchAction: "none" }}
           className="absolute z-20 flex h-[68px] w-[64px] -translate-x-1/2 -translate-y-1/2 select-none items-center justify-center rounded-sm bg-black/60 shadow-lg disabled:opacity-40"
-          title="Tap to scan. Long-press and drag to move; position is saved."
+          title="Tap to scan again and replace the displayed OCR text. Long-press and drag to move; position is saved."
           aria-label="Manual scan. Tap to scan, long press to move."
         >
           <span className="pointer-events-none flex h-[50px] w-[50px] items-center justify-center rounded-full border border-white bg-white text-2xl font-bold text-slate-900">⌖</span>
