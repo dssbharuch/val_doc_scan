@@ -1,3 +1,4 @@
+import FourXMatches from "./FourXMatches";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Tesseract from "tesseract.js";
 
@@ -7,7 +8,7 @@ const LANGUAGE_OPTIONS = [
   { value: "eng+guj", label: "BOTH" }
 ];
 
-export default function GuidedCamera({ onFinish, onClose, initialLines = [] }) {
+export default function GuidedCamera({ onFinish, onClose, initialLines = [], fourXMode = false, onFourXChoose }) {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const workerRef = useRef(null);
@@ -30,6 +31,7 @@ export default function GuidedCamera({ onFinish, onClose, initialLines = [] }) {
   const [autoScan, setAutoScan] = useState(true);
   const [workerReady, setWorkerReady] = useState(false);
   const [candidate, setCandidate] = useState("");
+  const [fourXHistory, setFourXHistory] = useState([]);
   const [lines, setLines] = useState(Array.isArray(initialLines) ? initialLines : []);
   const [widthPct, setWidthPct] = useState(90);
   const [manualButtonPosition, setManualButtonPosition] = useState(() => {
@@ -288,6 +290,15 @@ export default function GuidedCamera({ onFinish, onClose, initialLines = [] }) {
   }, [ready, workerReady, autoScan, candidate, makeLineCanvas, scanLine]);
 
 
+  function chooseFourX(product) {
+    setFourXHistory(previous => [...previous, product]);
+    onFourXChoose?.(product);
+    setCandidate("");
+    waitForMovementRef.current = false;
+    stableSinceRef.current = 0;
+    previousFrameRef.current = null;
+  }
+
   function acceptLine() {
     const clean = candidate.trim();
     if (!clean) return;
@@ -465,13 +476,13 @@ export default function GuidedCamera({ onFinish, onClose, initialLines = [] }) {
         )}
 
         {/* Show the result panel only after OCR detects text; never show an empty grey box. */}
-        {candidate && (
+        {candidate && !fourXMode && (
           <div className="absolute left-[4%] right-[4%] top-[41%] z-20 mx-auto max-h-[160px] overflow-hidden rounded-xl bg-white/95 p-2.5 text-slate-900 shadow-lg">
             <textarea
               value={candidate}
               onChange={(event) => setCandidate(event.target.value)}
               rows={2}
-              autoFocus
+              // Do not open the mobile keyboard automatically.
               className="max-h-[90px] min-h-[52px] w-full resize-y rounded-lg border border-slate-300 bg-white p-2 text-base outline-none focus:border-blue-500"
             />
             <div className="mt-1.5 flex justify-end gap-2">
@@ -492,6 +503,8 @@ export default function GuidedCamera({ onFinish, onClose, initialLines = [] }) {
           </div>
         )}
 
+        {fourXMode && candidate && <FourXMatches text={candidate} onChoose={chooseFourX} onReject={() => { setCandidate(""); waitForMovementRef.current = false; stableSinceRef.current = 0; }} />}
+        {fourXMode && fourXHistory.length > 0 && <div className="absolute top-[32%] right-3 z-20 rounded-lg bg-emerald-700/90 px-3 py-1 text-xs font-semibold">Selected: {fourXHistory.length} · Last: {fourXHistory[fourXHistory.length-1]?.base_code}</div>}
         {/* Manual scan button: long-press and drag to reposition; position is remembered. */}
         <button
           type="button"
@@ -524,13 +537,13 @@ export default function GuidedCamera({ onFinish, onClose, initialLines = [] }) {
           >
             {autoScan ? "AUTO ON" : "AUTO OFF"}
           </button>
-          <button
+          {!fourXMode && <button
             onClick={finish}
             disabled={!lines.length}
             className="absolute bottom-[max(20px,env(safe-area-inset-bottom))] right-4 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold shadow-lg disabled:opacity-40"
           >
             Finish ({lines.length})
-          </button>
+          </button>}
         </div>
       </div>
     </div>
