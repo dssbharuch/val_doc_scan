@@ -1,6 +1,6 @@
-import FourXMatches from "./FourXMatches";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Tesseract from "tesseract.js";
+import { findFourXMatches } from "../utils/fourxLookup";
 
 const LANGUAGE_OPTIONS = [
   { value: "eng", label: "ENG" },
@@ -8,7 +8,7 @@ const LANGUAGE_OPTIONS = [
   { value: "eng+guj", label: "BOTH" }
 ];
 
-export default function GalleryScanner({ imageUrl, onFinish, onClose, initialLines = [], fourXMode = false, onFourXChoose }) {
+export default function GalleryScanner({ imageUrl, onFinish, onClose, initialLines = [] }) {
   const imageRef = useRef(null);
 
   const workerRef = useRef(null);
@@ -31,7 +31,7 @@ export default function GalleryScanner({ imageUrl, onFinish, onClose, initialLin
 
   const [workerReady, setWorkerReady] = useState(false);
   const [candidate, setCandidate] = useState("");
-  const [fourXHistory, setFourXHistory] = useState([]);
+  const [fourXSelected, setFourXSelected] = useState([]);
   const [scanning, setScanning] = useState(false);
   const [lines, setLines] = useState(Array.isArray(initialLines) ? initialLines : []);
   const [widthPct, setWidthPct] = useState(90);
@@ -246,11 +246,12 @@ export default function GalleryScanner({ imageUrl, onFinish, onClose, initialLin
 
   // Gallery scanning is manual only: no camera frame loop or automatic OCR.
 
-  function chooseFourX(product) {
-    setFourXHistory(previous => [...previous, product]);
-    onFourXChoose?.(product);
+  const fourXLookup = fourXMode ? findFourXMatches(candidate) : { codes: [], matches: [] };
+
+  function selectFourXProduct(product) {
+    setFourXSelected((previous) => [product, ...previous].slice(0, 5));
     setCandidate("");
-    waitForMovementRef.current = false;
+    waitForMovementRef.current = true;
     stableSinceRef.current = 0;
     previousFrameRef.current = null;
   }
@@ -440,15 +441,28 @@ export default function GalleryScanner({ imageUrl, onFinish, onClose, initialLin
         )}
 
         {/* Show the result panel only after OCR detects text; never show an empty grey box. */}
-        {candidate && !fourXMode && (
-          <div className="absolute left-[4%] right-[4%] top-[41%] z-20 mx-auto max-h-[160px] overflow-hidden rounded-xl bg-white/95 p-2.5 text-slate-900 shadow-lg">
+        {candidate && (
+          <div className="absolute left-[4%] right-[4%] top-[41%] z-20 mx-auto max-h-[55vh] overflow-y-auto rounded-xl bg-white/95 p-2.5 text-slate-900 shadow-lg">
             <textarea
               value={candidate}
               onChange={(event) => setCandidate(event.target.value)}
               rows={2}
-              // Do not open the mobile keyboard automatically.
               className="max-h-[90px] min-h-[52px] w-full resize-y rounded-lg border border-slate-300 bg-white p-2 text-base outline-none focus:border-blue-500"
             />
+            {fourXMode && (
+              <div className="mt-2 max-h-[34vh] space-y-2 overflow-y-auto">
+                {fourXLookup.codes.length > 0 ? (
+                  fourXLookup.matches.length > 0 ? fourXLookup.matches.map((product) => (
+                    <button key={product.sku || `${product.base_code}-${product.variant}`} type="button" onClick={() => selectFourXProduct(product)} className="block w-full rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-left text-sm">
+                      <div className="flex items-center justify-between gap-2"><strong className="text-emerald-900">{product.base_code} · {product.variant || "Standard"}</strong><span className="rounded bg-emerald-600 px-2 py-1 text-xs font-bold text-white">Select</span></div>
+                      <div className="mt-1 text-slate-800">{product.description}</div>
+                      <div className="mt-1 text-xs text-slate-600">Pack: {product.package_qty ?? "—"} · Outer: {product.outer_qty ?? "—"}</div>
+                      {Array.isArray(product.source_price_columns) && <div className="mt-1 text-xs text-slate-600">Source prices (unverified columns): {product.source_price_columns.join(" | ")}</div>}
+                    </button>
+                  )) : <div className="rounded-lg bg-amber-50 p-2 text-xs text-amber-800">Code {fourXLookup.codes.join(", ")} found in OCR, but no matching product was found in the FOUR-X JSON.</div>
+                ) : <div className="rounded-lg bg-amber-50 p-2 text-xs text-amber-800">No FX numeric product code detected in this scan. Move the label/code into the scan line and scan again.</div>}
+              </div>
+            )}
             <div className="mt-1.5 flex justify-end gap-2">
               <button
                 type="button"
@@ -462,13 +476,11 @@ export default function GalleryScanner({ imageUrl, onFinish, onClose, initialLin
                 title="Reject and scan again"
                 className="rounded-lg bg-rose-100 px-5 py-1.5 text-sm font-bold text-rose-700 disabled:opacity-40"
               >✕</button>
-              <button onClick={acceptLine} disabled={!candidate.trim()} className="rounded-lg bg-emerald-600 px-5 py-1.5 text-sm font-bold text-white disabled:opacity-40">✓</button>
+              {!fourXMode && <button onClick={acceptLine} disabled={!candidate.trim()} className="rounded-lg bg-emerald-600 px-5 py-1.5 text-sm font-bold text-white disabled:opacity-40">✓</button>}
             </div>
           </div>
         )}
 
-        {fourXMode && candidate && <FourXMatches text={candidate} onChoose={chooseFourX} onReject={() => { setCandidate(""); waitForMovementRef.current = false; stableSinceRef.current = 0; }} />}
-        {fourXMode && fourXHistory.length > 0 && <div className="absolute top-[32%] right-3 z-20 rounded-lg bg-emerald-700/90 px-3 py-1 text-xs font-semibold">Selected: {fourXHistory.length} · Last: {fourXHistory[fourXHistory.length-1]?.base_code}</div>}
         {/* Manual scan button: long-press and drag to reposition; position is remembered. */}
         <button
           type="button"
@@ -492,16 +504,23 @@ export default function GalleryScanner({ imageUrl, onFinish, onClose, initialLin
           <span className="pointer-events-none flex h-[50px] w-[50px] items-center justify-center rounded-full border border-white bg-white text-2xl font-bold text-slate-900">{scanning ? "…" : "⌖"}</span>
         </button>
 
+        {fourXMode && fourXSelected.length > 0 && (
+          <div className="absolute bottom-20 left-3 right-3 z-20 max-h-24 overflow-y-auto rounded-xl bg-white/95 p-2 text-slate-900 shadow-lg">
+            <div className="mb-1 text-xs font-bold text-emerald-700">Selected FOUR-X products ({fourXSelected.length})</div>
+            {fourXSelected.map((item, index) => <div key={`${item.sku}-${index}`} className="text-xs">{item.base_code} · {item.description} · {item.variant}</div>)}
+          </div>
+        )}
+
         {/* Bottom controls: Auto toggle left, Finish right. */}
         <div className="absolute bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-black/90 to-transparent p-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-16">
           <div className="absolute bottom-[max(20px,env(safe-area-inset-bottom))] left-4 rounded-full bg-black/70 px-3 py-3 text-xs font-bold">MANUAL ONLY · {Math.round(zoom * 100)}%</div>
-          {!fourXMode && <button
-            onClick={finish}
-            disabled={!lines.length}
+          <button
+            onClick={fourXMode ? onClose : finish}
+            disabled={!fourXMode && !lines.length}
             className="absolute bottom-[max(20px,env(safe-area-inset-bottom))] right-4 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold shadow-lg disabled:opacity-40"
           >
-            Finish ({lines.length})
-          </button>}
+            {fourXMode ? "Done" : `Finish (${lines.length})`}
+          </button>
         </div>
       </div>
     </div>

@@ -89,7 +89,6 @@ function ExportDataModal({ data, pages, onClose }) {
 export default function ScannerFlow() {
   const [cameraOpen, setCameraOpen] = useState(false);
   const [fourXMode, setFourXMode] = useState(false);
-  const [fourXSelections, setFourXSelections] = useState([]);
   const [galleryUrl, setGalleryUrl] = useState(null);
   const [currentPage, setCurrentPage] = useState(null);
   const [savedPages, setSavedPages] = useState([]);
@@ -104,6 +103,12 @@ export default function ScannerFlow() {
   function openCamera() {
     setFourXMode(false);
     setLiveScanLines([]);
+    setCameraOpen(true);
+  }
+
+  function openFourXScanner() {
+    setLiveScanLines([]);
+    setFourXMode(true);
     setCameraOpen(true);
   }
 
@@ -366,6 +371,13 @@ export default function ScannerFlow() {
             📷 Scan New Page
           </button>
 
+          <button
+            onClick={openFourXScanner}
+            className="mt-3 w-full rounded-xl bg-emerald-600 px-4 py-4 font-semibold text-white shadow-sm"
+          >
+            🔎 Scan FourX – Product Demo
+          </button>
+
           <label className="mt-3 block w-full cursor-pointer rounded-xl bg-indigo-600 px-4 py-4 text-center font-semibold text-white">
             🖼️ Scan Photo from Gallery
             <input type="file" accept="image/jpeg,image/png,image/webp,image/*" className="hidden" onChange={(event) => {
@@ -377,8 +389,6 @@ export default function ScannerFlow() {
             }} />
           </label>
 
-          <button onClick={() => { setFourXMode(true); setFourXSelections([]); setLiveScanLines([]); setCameraOpen(true); }} className="mt-3 w-full rounded-xl bg-emerald-600 px-4 py-4 font-semibold text-white">🔎 Scan FourX · Product Demo</button>
-          <p className="mt-1 text-xs text-slate-500">Scan FX codes using the line camera. Product matching uses the included local JSON.</p>
           <button
             onClick={() => setShowExport(true)}
             disabled={!savedPages.length}
@@ -423,9 +433,8 @@ export default function ScannerFlow() {
 
       {cameraOpen && (
         <GuidedCamera
-          initialLines={liveScanLines}
           fourXMode={fourXMode}
-          onFourXChoose={(product) => setFourXSelections(previous => [...previous, product])}
+          initialLines={liveScanLines}
           onFinish={handleLiveFinish}
           onClose={() => {
             setCameraOpen(false);
@@ -439,14 +448,11 @@ export default function ScannerFlow() {
         <GalleryScanner
           imageUrl={galleryUrl}
           initialLines={liveScanLines}
-          fourXMode={fourXMode}
-          onFourXChoose={(product) => setFourXSelections(previous => [...previous, product])}
           onFinish={handleLiveFinish}
-          onClose={() => { setGalleryUrl(null); setFourXMode(false); setLiveScanLines([]); }}
+          onClose={() => { setGalleryUrl(null); setLiveScanLines([]); }}
         />
       )}
 
-      {fourXSelections.length > 0 && !cameraOpen && !galleryUrl && <div className="mx-auto mt-3 max-w-3xl rounded-xl bg-white p-4 shadow"><h2 className="font-bold">FourX selected products ({fourXSelections.length})</h2>{fourXSelections.map((p,i) => <p key={i} className="mt-1 text-sm">{p.base_code} · {p.description} · {p.variant}</p>)}<button onClick={() => {setFourXMode(true);setCameraOpen(true)}} className="mt-3 rounded-lg bg-emerald-600 px-4 py-2 text-white">Continue FourX scanning</button></div>}
       {currentPage && (
         <ScanEditor
           page={currentPage}
