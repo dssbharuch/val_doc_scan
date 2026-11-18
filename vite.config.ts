@@ -6,6 +6,7 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
+    base: '/val_doc_scan/',
     plugins: [
       react(),
       tailwindcss(),
