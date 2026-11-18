@@ -1,0 +1,6 @@
+{
+  "name": "ONE RETAIL AI",
+  "description": "Unified retail intelligence combining voice billing, camera OCR billing, and rack photo product counting.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
